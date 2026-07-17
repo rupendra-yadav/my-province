@@ -13,6 +13,7 @@ import {
   typography,
   shadow,
   gradients,
+  motion,
   ThemeColors,
 } from '../constants/theme';
 
@@ -25,6 +26,7 @@ type ThemeContextValue = {
   typography: typeof typography;
   shadow: typeof shadow;
   gradients: typeof gradients;
+  motion: typeof motion;
   isDark: boolean;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
@@ -55,6 +57,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       typography,
       shadow,
       gradients,
+      motion,
       isDark,
       mode,
       setMode,

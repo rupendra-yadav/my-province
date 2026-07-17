@@ -1,6 +1,6 @@
 // app/(auth)/phone.tsx
-import React, { useRef, useState } from 'react';
-import { View, Text, TextInput, Animated, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
@@ -10,29 +10,15 @@ export default function PhoneScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
-  const shake = useRef(new Animated.Value(0)).current;
-
-  const triggerShake = () => {
-    shake.setValue(0);
-    Animated.sequence([
-      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: -1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 1, duration: 60, useNativeDriver: true }),
-      Animated.timing(shake, { toValue: 0, duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
 
   const handleContinue = () => {
     if (phone.length !== 10) {
       setError('Enter a valid 10-digit mobile number');
-      triggerShake();
       return;
     }
     setError('');
-    router.push('/(auth)/otp');
+    router.push({ pathname: '/(auth)/otp', params: { phone } });
   };
-
-  const translateX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-8, 8] });
 
   return (
     <KeyboardAvoidingView
@@ -41,7 +27,7 @@ export default function PhoneScreen() {
     >
       <View style={{ flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
         <FadeSlideIn>
-          <IconBadge name="call" size={56} tone="primary" />
+          <IconBadge name="call-outline" size={52} />
           <ScreenHeading
             title="What's your number?"
             subtitle="We'll send a verification code to confirm it's you."
@@ -76,16 +62,15 @@ export default function PhoneScreen() {
           <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.xs }]}>
             Mobile number
           </Text>
-          <Animated.View
+          <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               backgroundColor: colors.surface,
               borderRadius: radius.md,
-              borderWidth: 1.5,
+              borderWidth: 1,
               borderColor: error ? colors.danger : colors.border,
               paddingHorizontal: spacing.lg,
-              transform: [{ translateX }],
             }}
           >
             <Text style={[typography.bodyMedium, { color: colors.textMuted }]}>+91</Text>
@@ -109,7 +94,7 @@ export default function PhoneScreen() {
                 },
               ]}
             />
-          </Animated.View>
+          </View>
           {!!error && (
             <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.xs }]}>
               {error}

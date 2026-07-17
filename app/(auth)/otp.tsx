@@ -1,19 +1,20 @@
 // app/(auth)/otp.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, Animated } from 'react-native';
-import { router } from 'expo-router';
+import { View, Text, TextInput, Pressable } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
+import { isAdminPhone } from '../../constants/admins';
 import { FadeSlideIn, PrimaryButton, ScreenHeading, IconBadge } from '../../components/ui';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
 
 export default function OtpScreen() {
+  const { phone } = useLocalSearchParams<{ phone: string }>();
   const { colors, spacing, radius, typography } = useTheme();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
   const inputs = useRef<Array<TextInput | null>>([]);
-  const boxScales = useRef(digits.map(() => new Animated.Value(1))).current;
 
   useEffect(() => {
     if (seconds === 0) return;
@@ -21,22 +22,12 @@ export default function OtpScreen() {
     return () => clearTimeout(t);
   }, [seconds]);
 
-  const bounceBox = (index: number) => {
-    Animated.sequence([
-      Animated.spring(boxScales[index], { toValue: 1.12, useNativeDriver: true, speed: 50 }),
-      Animated.spring(boxScales[index], { toValue: 1, useNativeDriver: true, speed: 50 }),
-    ]).start();
-  };
-
   const handleChange = (text: string, index: number) => {
     const clean = text.replace(/[^0-9]/g, '');
     const next = [...digits];
     next[index] = clean.slice(-1);
     setDigits(next);
-    if (clean) {
-      bounceBox(index);
-      if (index < OTP_LENGTH - 1) inputs.current[index + 1]?.focus();
-    }
+    if (clean && index < OTP_LENGTH - 1) inputs.current[index + 1]?.focus();
   };
 
   const handleKeyPress = (e: any, index: number) => {
@@ -45,15 +36,23 @@ export default function OtpScreen() {
     }
   };
 
+  const handleVerify = () => {
+    if (phone && isAdminPhone(phone)) {
+      router.replace('/(admin)/dashboard');
+    } else {
+      router.push('/(auth)/register');
+    }
+  };
+
   const isComplete = digits.every((d) => d !== '');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
       <FadeSlideIn>
-        <IconBadge name="chatbubble-ellipses" size={56} tone="accent" />
+        <IconBadge name="chatbubble-ellipses-outline" size={52} emphasis />
         <ScreenHeading
           title="Enter the code"
-          subtitle="We've sent a 6-digit code to +91 XXXXX XXXXX"
+          subtitle={`We've sent a 6-digit code to +91 ${phone ?? ''}`}
           style={{ marginTop: spacing.lg }}
         />
       </FadeSlideIn>
@@ -61,28 +60,27 @@ export default function OtpScreen() {
       <FadeSlideIn delay={100}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           {digits.map((digit, i) => (
-            <Animated.View key={i} style={{ transform: [{ scale: boxScales[i] }] }}>
-              <TextInput
-                ref={(el) => (inputs.current[i] = el)}
-                value={digit}
-                onChangeText={(t) => handleChange(t, i)}
-                onKeyPress={(e) => handleKeyPress(e, i)}
-                keyboardType="number-pad"
-                maxLength={1}
-                style={{
-                  width: 46,
-                  height: 56,
-                  borderRadius: radius.md,
-                  borderWidth: 1.5,
-                  borderColor: digit ? colors.primary : colors.border,
-                  backgroundColor: colors.surface,
-                  textAlign: 'center',
-                  fontSize: 22,
-                  fontWeight: '700',
-                  color: colors.text,
-                }}
-              />
-            </Animated.View>
+            <TextInput
+              key={i}
+              ref={(el) => (inputs.current[i] = el)}
+              value={digit}
+              onChangeText={(t) => handleChange(t, i)}
+              onKeyPress={(e) => handleKeyPress(e, i)}
+              keyboardType="number-pad"
+              maxLength={1}
+              style={{
+                width: 46,
+                height: 56,
+                borderRadius: radius.md,
+                borderWidth: 1,
+                borderColor: digit ? colors.primary : colors.border,
+                backgroundColor: colors.surface,
+                textAlign: 'center',
+                fontSize: 20,
+                fontWeight: '600',
+                color: colors.text,
+              }}
+            />
           ))}
         </View>
 
@@ -104,7 +102,7 @@ export default function OtpScreen() {
           label="Verify"
           icon="checkmark"
           disabled={!isComplete}
-          onPress={() => router.push('/(auth)/register')}
+          onPress={handleVerify}
         />
       </FadeSlideIn>
     </View>

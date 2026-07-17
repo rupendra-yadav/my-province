@@ -3,7 +3,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { Card, FadeSlideIn, GhostButton, IconBadge, Pulse } from '../../components/ui';
+import { Card, FadeSlideIn, GhostButton, IconBadge, SoftPulse } from '../../components/ui';
 
 const STEPS = [
   { label: 'Details submitted', done: true },
@@ -17,9 +17,9 @@ export default function PendingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
       <FadeSlideIn style={{ alignItems: 'center', marginBottom: spacing.xxl }}>
-        <Pulse>
-          <IconBadge name="time" size={84} tone="warning" />
-        </Pulse>
+        <SoftPulse>
+          <IconBadge name="time-outline" size={76} emphasis />
+        </SoftPulse>
         <Text style={[typography.h1, { color: colors.text, marginTop: spacing.xl, textAlign: 'center' }]}>
           Your request is with the committee
         </Text>

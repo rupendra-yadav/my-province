@@ -2,6 +2,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { RequestsProvider } from '../context/RequestsContext';
 
 function RootStack() {
   const { isDark, colors } = useTheme();
@@ -16,6 +17,7 @@ function RootStack() {
         }}
       >
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(admin)" />
       </Stack>
     </>
   );
@@ -24,7 +26,9 @@ function RootStack() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <RootStack />
+      <RequestsProvider>
+        <RootStack />
+      </RequestsProvider>
     </ThemeProvider>
   );
 }

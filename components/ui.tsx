@@ -1,6 +1,7 @@
 // components/ui.tsx
-// Shared building blocks. Keep screens thin — compose these instead of
-// writing raw <View>/<Text> styling per screen.
+// Shared building blocks for the Nivas direction. Depth = hairline borders,
+// not shadows. Motion = calm crossfades, not springs or bounces.
+// Keep screens thin — compose these instead of writing raw styling per screen.
 
 import React, { useEffect, useRef } from 'react';
 import {
@@ -11,17 +12,15 @@ import {
   Animated,
   ActivityIndicator,
   ViewStyle,
-  TextStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 
-// ---------- FadeSlideIn: wraps any screen content for an entrance animation ----------
+// ---------- FadeIn: quiet entrance, no vertical bounce — a slight rise only ----------
 export function FadeSlideIn({
   children,
   delay = 0,
-  distance = 16,
+  distance = 8,
   style,
 }: {
   children: React.ReactNode;
@@ -29,6 +28,7 @@ export function FadeSlideIn({
   distance?: number;
   style?: ViewStyle;
 }) {
+  const { motion } = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(distance)).current;
 
@@ -36,13 +36,13 @@ export function FadeSlideIn({
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 420,
+        duration: motion.slow,
         delay,
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: 420,
+        duration: motion.slow,
         delay,
         useNativeDriver: true,
       }),
@@ -56,25 +56,25 @@ export function FadeSlideIn({
   );
 }
 
-// ---------- Pulse: gentle looping scale pulse, used on the pending/waiting screen ----------
-export function Pulse({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  const scale = useRef(new Animated.Value(1)).current;
+// ---------- SoftPulse: subtle opacity breathing, used sparingly (pending/waiting state) ----------
+export function SoftPulse({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(scale, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.55, duration: 1100, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 1100, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, []);
 
-  return <Animated.View style={[{ transform: [{ scale }] }, style]}>{children}</Animated.View>;
+  return <Animated.View style={[{ opacity }, style]}>{children}</Animated.View>;
 }
 
-// ---------- PrimaryButton: gradient CTA with press-scale feedback ----------
+// ---------- PrimaryButton: flat ink, no gradient — restraint is the statement ----------
 export function PrimaryButton({
   label,
   onPress,
@@ -90,35 +90,26 @@ export function PrimaryButton({
   disabled?: boolean;
   style?: ViewStyle;
 }) {
-  const { colors, radius, spacing, typography, gradients, shadow } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
+  const { colors, radius, spacing, typography, motion } = useTheme();
+  const opacity = useRef(new Animated.Value(1)).current;
 
   const pressIn = () =>
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 40 }).start();
+    Animated.timing(opacity, { toValue: 0.7, duration: motion.fast, useNativeDriver: true }).start();
   const pressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40 }).start();
+    Animated.timing(opacity, { toValue: 1, duration: motion.fast, useNativeDriver: true }).start();
 
   const isDisabled = disabled || loading;
 
   return (
-    <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={pressIn}
-        onPressOut={pressOut}
-        disabled={isDisabled}
-        style={{ opacity: isDisabled ? 0.6 : 1 }}
-      >
-        <LinearGradient
-          colors={gradients.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+    <Animated.View style={[{ opacity: isDisabled ? 0.4 : opacity }, style]}>
+      <Pressable onPress={onPress} onPressIn={pressIn} onPressOut={pressOut} disabled={isDisabled}>
+        <View
           style={[
             styles.buttonBase,
             {
+              backgroundColor: colors.primary,
               borderRadius: radius.md,
-              paddingVertical: spacing.md + 2,
-              ...shadow('md', colors.primary),
+              paddingVertical: spacing.md + 3,
             },
           ]}
         >
@@ -129,21 +120,23 @@ export function PrimaryButton({
               {icon && (
                 <Ionicons
                   name={icon}
-                  size={19}
+                  size={17}
                   color={colors.onPrimary}
                   style={{ marginRight: spacing.sm }}
                 />
               )}
-              <Text style={[typography.bodyMedium, { color: colors.onPrimary }]}>{label}</Text>
+              <Text style={[typography.bodyMedium, { color: colors.onPrimary, letterSpacing: 0.2 }]}>
+                {label}
+              </Text>
             </>
           )}
-        </LinearGradient>
+        </View>
       </Pressable>
     </Animated.View>
   );
 }
 
-// ---------- GhostButton: low-emphasis secondary action ----------
+// ---------- GhostButton: hairline outline, no fill ----------
 export function GhostButton({
   label,
   onPress,
@@ -163,31 +156,34 @@ export function GhostButton({
         styles.buttonBase,
         {
           borderRadius: radius.md,
-          paddingVertical: spacing.md,
-          backgroundColor: colors.primaryMuted,
+          paddingVertical: spacing.md + 2,
+          borderWidth: 1,
+          borderColor: colors.borderStrong,
+          backgroundColor: 'transparent',
         },
         style,
       ]}
     >
       {icon && (
-        <Ionicons name={icon} size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
+        <Ionicons name={icon} size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
       )}
-      <Text style={[typography.bodyMedium, { color: colors.primary }]}>{label}</Text>
+      <Text style={[typography.bodyMedium, { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
 
-// ---------- Card: elevated surface container ----------
+// ---------- Card: hairline border, near-zero shadow ----------
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  const { colors, radius, spacing, shadow } = useTheme();
+  const { colors, radius, spacing } = useTheme();
   return (
     <View
       style={[
         {
           backgroundColor: colors.surface,
           borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.border,
           padding: spacing.lg,
-          ...shadow('sm'),
         },
         style,
       ]}
@@ -197,42 +193,36 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
   );
 }
 
-// ---------- IconBadge: circular icon chip, used throughout for visual anchors ----------
+// ---------- IconBadge: monochrome outline icon on a hairline circle — no color-coded tones ----------
 export function IconBadge({
   name,
   size = 44,
-  tone = 'primary',
+  emphasis = false,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   size?: number;
-  tone?: 'primary' | 'accent' | 'success' | 'danger' | 'warning';
+  emphasis?: boolean;
 }) {
-  const { colors, radius } = useTheme();
-  const toneMap = {
-    primary: { bg: colors.primaryMuted, fg: colors.primary },
-    accent: { bg: colors.accentMuted, fg: colors.accent },
-    success: { bg: colors.successBg, fg: colors.success },
-    danger: { bg: colors.dangerBg, fg: colors.danger },
-    warning: { bg: colors.warningBg, fg: colors.warning },
-  }[tone];
-
+  const { colors } = useTheme();
   return (
     <View
       style={{
         width: size,
         height: size,
-        borderRadius: radius.pill,
-        backgroundColor: toneMap.bg,
+        borderRadius: size / 2,
+        borderWidth: 1,
+        borderColor: emphasis ? colors.accent : colors.border,
+        backgroundColor: emphasis ? colors.accentMuted : colors.background,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <Ionicons name={name} size={size * 0.5} color={toneMap.fg} />
+      <Ionicons name={name} size={size * 0.42} color={emphasis ? colors.accent : colors.text} />
     </View>
   );
 }
 
-// ---------- ScreenHeading: consistent title + subtitle block ----------
+// ---------- ScreenHeading ----------
 export function ScreenHeading({
   title,
   subtitle,
@@ -251,6 +241,76 @@ export function ScreenHeading({
           {subtitle}
         </Text>
       )}
+    </View>
+  );
+}
+
+// ---------- StatusChip: small muted status indicator — the one place color earns its keep ----------
+export function StatusChip({ status }: { status: 'pending' | 'approved' | 'rejected' }) {
+  const { colors, radius, spacing, typography } = useTheme();
+  const map = {
+    pending: { bg: colors.warningBg, fg: colors.warning, label: 'Pending' },
+    approved: { bg: colors.successBg, fg: colors.success, label: 'Approved' },
+    rejected: { bg: colors.dangerBg, fg: colors.danger, label: 'Rejected' },
+  }[status];
+
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        backgroundColor: map.bg,
+        borderRadius: radius.sm,
+        paddingHorizontal: spacing.sm + 2,
+        paddingVertical: 3,
+      }}
+    >
+      <Text style={[typography.tiny, { color: map.fg, letterSpacing: 0.4 }]}>
+        {map.label.toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+// ---------- SegmentedTabs: quiet filter row with counts ----------
+export function SegmentedTabs<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string; count?: number }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const { colors, radius, spacing, typography } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+      {options.map((opt) => {
+        const active = opt.key === value;
+        return (
+          <Pressable
+            key={opt.key}
+            onPress={() => onChange(opt.key)}
+            style={{
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+              borderRadius: radius.pill,
+              borderWidth: 1,
+              borderColor: active ? colors.primary : colors.border,
+              backgroundColor: active ? colors.primary : 'transparent',
+            }}
+          >
+            <Text
+              style={[
+                typography.caption,
+                { color: active ? colors.onPrimary : colors.textMuted },
+              ]}
+            >
+              {opt.label}
+              {opt.count !== undefined ? `  ${opt.count}` : ''}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

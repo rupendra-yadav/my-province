@@ -1,43 +1,40 @@
 // constants/theme.ts
-// Design tokens for Mera Parisar. Single source of truth for all visual styling.
-// Import via useTheme() from context/ThemeContext — don't hardcode colors in screens.
+// Design tokens for Mera Parisar — "Nivas" (Quiet Premium) direction.
+// Restraint over decoration: ink instead of a loud brand color, hairline
+// borders instead of shadows, one muted accent used sparingly.
+// Import via useTheme() from context/ThemeContext — never hardcode colors in screens.
 
 export const palette = {
-  // Primary — deep indigo, feels trustworthy/official (committee-friendly)
-  indigo50: '#EEF1FF',
-  indigo100: '#DDE3FF',
-  indigo300: '#9BA8F2',
-  indigo500: '#4C5FD5',
-  indigo600: '#3D4DB8',
-  indigo700: '#2F3D94',
-  indigo900: '#1C2359',
+  // Ink — primary is near-black, not a "brand color". Buttons, emphasis, headings.
+  ink900: '#15141A',
+  ink800: '#211F28',
+  ink700: '#302D38',
+  ink500: '#54505F',
 
-  // Accent — warm amber/terracotta, evokes home & community (courtyard warmth)
-  amber50: '#FFF7E8',
-  amber100: '#FFEBC2',
-  amber400: '#F5A623',
-  amber500: '#E8930F',
-  amber600: '#C97A08',
+  // Stone — warm neutrals, not clinical gray
+  stone50: '#FAF8F5',
+  stone100: '#F2EFEA',
+  stone200: '#E7E2DA',
+  stone300: '#D7D0C4',
+  stone400: '#B3AA9B',
+  stone500: '#8C8375',
+  stone600: '#6B6459',
 
-  // Status
-  green500: '#2E9E5B',
-  green100: '#DFF5E7',
-  red500: '#E0554A',
-  red100: '#FCE4E2',
-  yellow500: '#DDA71B',
-  yellow100: '#FCF2D8',
+  // Bronze — the one accent, used sparingly (active states, key highlights only)
+  bronze300: '#D8C3A0',
+  bronze400: '#B3925E',
+  bronze500: '#96774A',
+  bronze600: '#785D38',
 
-  // Neutrals
+  // Status — muted, not saturated
+  green500: '#5C7A5E',
+  green100: '#E6EBE3',
+  red500: '#A8564D',
+  red100: '#F2E4E1',
+  amber500: '#A0813F',
+  amber100: '#EFE7D3',
+
   white: '#FFFFFF',
-  gray50: '#F7F8FB',
-  gray100: '#EEF0F6',
-  gray200: '#E1E4ED',
-  gray300: '#C7CCDA',
-  gray400: '#9AA1B5',
-  gray500: '#6B7284',
-  gray600: '#4B5163',
-  gray800: '#282C39',
-  gray900: '#15171F',
   black: '#000000',
 };
 
@@ -54,6 +51,7 @@ export type ThemeColors = {
   textMuted: string;
   textInverted: string;
   border: string;
+  borderStrong: string;
   success: string;
   successBg: string;
   danger: string;
@@ -64,47 +62,49 @@ export type ThemeColors = {
 };
 
 export const lightColors: ThemeColors = {
-  background: palette.gray50,
+  background: palette.stone50,
   surface: palette.white,
   surfaceElevated: palette.white,
-  primary: palette.indigo600,
-  primaryMuted: palette.indigo50,
-  onPrimary: palette.white,
-  accent: palette.amber500,
-  accentMuted: palette.amber50,
-  text: palette.gray900,
-  textMuted: palette.gray500,
-  textInverted: palette.white,
-  border: palette.gray200,
+  primary: palette.ink900,
+  primaryMuted: palette.stone100,
+  onPrimary: palette.stone50,
+  accent: palette.bronze500,
+  accentMuted: '#F1E7D6',
+  text: palette.ink900,
+  textMuted: palette.stone600,
+  textInverted: palette.stone50,
+  border: palette.stone200,
+  borderStrong: palette.stone300,
   success: palette.green500,
   successBg: palette.green100,
   danger: palette.red500,
   dangerBg: palette.red100,
-  warning: palette.yellow500,
-  warningBg: palette.yellow100,
-  overlay: 'rgba(21, 23, 31, 0.5)',
+  warning: palette.amber500,
+  warningBg: palette.amber100,
+  overlay: 'rgba(21, 20, 26, 0.55)',
 };
 
 export const darkColors: ThemeColors = {
-  background: palette.gray900,
-  surface: palette.gray800,
-  surfaceElevated: '#31364A',
-  primary: palette.indigo300,
-  primaryMuted: '#232A4D',
-  onPrimary: palette.indigo900,
-  accent: palette.amber400,
-  accentMuted: '#3A2F14',
-  text: palette.gray50,
-  textMuted: palette.gray400,
-  textInverted: palette.gray900,
-  border: '#383D50',
-  success: '#4CC985',
-  successBg: '#173A29',
-  danger: '#F27C72',
-  dangerBg: '#3B1E1C',
-  warning: '#F0C24B',
-  warningBg: '#3A2F14',
-  overlay: 'rgba(0, 0, 0, 0.6)',
+  background: palette.ink900,
+  surface: palette.ink800,
+  surfaceElevated: palette.ink700,
+  primary: palette.stone50,
+  primaryMuted: palette.ink700,
+  onPrimary: palette.ink900,
+  accent: palette.bronze400,
+  accentMuted: '#3A311F',
+  text: palette.stone50,
+  textMuted: palette.stone400,
+  textInverted: palette.ink900,
+  border: '#332F3B',
+  borderStrong: '#413C49',
+  success: '#7FA082',
+  successBg: '#25301F',
+  danger: '#C17B72',
+  dangerBg: '#3A2420',
+  warning: '#C4A466',
+  warningBg: '#332B18',
+  overlay: 'rgba(0, 0, 0, 0.65)',
 };
 
 export const spacing = {
@@ -117,30 +117,34 @@ export const spacing = {
   xxxl: 48,
 };
 
+// Refined, consistent — no pill-shaped buttons in this direction.
 export const radius = {
   sm: 8,
-  md: 14,
-  lg: 20,
-  xl: 28,
-  pill: 999,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  pill: 999, // reserved for avatars/dots only, not buttons
 };
 
+// Weight capped at 600 — no heavy 700 displays. Wider tracking on headings
+// for a quieter, more confident read.
 export const typography = {
-  display: { fontSize: 32, fontWeight: '700' as const, lineHeight: 40 },
-  h1: { fontSize: 26, fontWeight: '700' as const, lineHeight: 33 },
-  h2: { fontSize: 20, fontWeight: '600' as const, lineHeight: 27 },
-  body: { fontSize: 16, fontWeight: '400' as const, lineHeight: 23 },
-  bodyMedium: { fontSize: 16, fontWeight: '600' as const, lineHeight: 23 },
-  caption: { fontSize: 13, fontWeight: '500' as const, lineHeight: 18 },
-  tiny: { fontSize: 11, fontWeight: '500' as const, lineHeight: 15 },
+  display: { fontSize: 30, fontWeight: '600' as const, lineHeight: 38, letterSpacing: 0.2 },
+  h1: { fontSize: 24, fontWeight: '600' as const, lineHeight: 31, letterSpacing: 0.2 },
+  h2: { fontSize: 18, fontWeight: '600' as const, lineHeight: 25, letterSpacing: 0.1 },
+  body: { fontSize: 15, fontWeight: '400' as const, lineHeight: 22 },
+  bodyMedium: { fontSize: 15, fontWeight: '500' as const, lineHeight: 22 },
+  caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 17, letterSpacing: 0.3 },
+  tiny: { fontSize: 10, fontWeight: '500' as const, lineHeight: 14, letterSpacing: 0.3 },
 };
 
-// elevation helper — pass a color for tinted shadows if needed
-export const shadow = (level: 'sm' | 'md' | 'lg' = 'md', color = palette.gray900) => {
+// Depth comes from hairline borders, not shadows. Shadows reserved for
+// sheets/modals only, and kept barely-there even then.
+export const shadow = (level: 'sm' | 'md' | 'lg' = 'sm', color = palette.ink900) => {
   const levels = {
-    sm: { elevation: 2, offset: 1, opacity: 0.06, radius: 4 },
-    md: { elevation: 6, offset: 3, opacity: 0.1, radius: 10 },
-    lg: { elevation: 12, offset: 6, opacity: 0.14, radius: 20 },
+    sm: { elevation: 1, offset: 1, opacity: 0.03, radius: 3 },
+    md: { elevation: 3, offset: 2, opacity: 0.05, radius: 8 },
+    lg: { elevation: 6, offset: 4, opacity: 0.08, radius: 16 },
   }[level];
   return {
     shadowColor: color,
@@ -151,20 +155,17 @@ export const shadow = (level: 'sm' | 'md' | 'lg' = 'md', color = palette.gray900
   };
 };
 
+// Kept for compatibility with any screen importing gradients — but the
+// Nivas direction avoids gradient hero sections; prefer flat ink instead.
 export const gradients = {
-  primary: [palette.indigo500, palette.indigo700] as const,
-  warm: [palette.amber400, palette.amber600] as const,
-  dusk: [palette.indigo700, palette.gray900] as const,
+  primary: [palette.ink800, palette.ink900] as const,
+  warm: [palette.bronze400, palette.bronze600] as const,
+  dusk: [palette.ink800, palette.ink900] as const,
 };
 
-
-export const Colors = {
-  light: {
-    ...lightColors,
-    tint: lightColors.primary,
-  },
-  dark: {
-    ...darkColors,
-    tint: darkColors.primary,
-  },
+// Motion timing — calm and consistent across the app
+export const motion = {
+  fast: 150,
+  base: 260,
+  slow: 400,
 };
