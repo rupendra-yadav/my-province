@@ -1,63 +1,72 @@
 // context/RequestsContext.tsx
-// Dummy in-memory store for resident registration requests, shared between
-// the admin dashboard and detail screen. When wiring the real backend:
-//   - replace INITIAL_REQUESTS with a GET /admin/requests fetch on mount
-//   - replace approve()/reject() bodies with POST /admin/requests/:id/approve|reject
-// The shape of ResidentRequest and the hook's return type can stay the same.
+// Wired to the real backend now. fetchRequests/approve/reject call the
+// actual endpoints; screens (dashboard, detail) are unchanged, per the
+// original design of this seam.
 
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { ApiError } from '../lib/api';
+import { approveRequest, listRequests, rejectRequest, RequestItem } from '../lib/endpoints';
+import { useAuth } from './AuthContext';
 
-export type ResidentRequest = {
-  id: string;
-  name: string;
-  phone: string;
-  city: string;
-  society: string;
-  block: string;
-  flat: string;
-  residentType: 'Owner' | 'Tenant';
-  submittedAt: string; // ISO date
-  status: 'pending' | 'approved' | 'rejected';
-  rejectionReason?: string;
-};
-
-const INITIAL_REQUESTS: ResidentRequest[] = [
-  { id: '1', name: 'Anita Sharma', phone: '9876543210', city: 'Raipur', society: 'Shalimar Greens', block: 'Block A', flat: 'A-101', residentType: 'Owner', submittedAt: '2026-07-15', status: 'pending' },
-  { id: '2', name: 'Ravi Verma', phone: '9123456780', city: 'Raipur', society: 'Shalimar Greens', block: 'Block B', flat: 'B-201', residentType: 'Tenant', submittedAt: '2026-07-15', status: 'pending' },
-  { id: '3', name: 'Priya Nair', phone: '9988776655', city: 'Raipur', society: 'Ashiana Residency', block: 'Tower 1', flat: '102', residentType: 'Owner', submittedAt: '2026-07-14', status: 'approved' },
-  { id: '4', name: 'Sanjay Deshmukh', phone: '9012345678', city: 'Bilaspur', society: 'Green Valley Enclave', block: 'Wing C', flat: 'C-2', residentType: 'Owner', submittedAt: '2026-07-14', status: 'pending' },
-  { id: '5', name: 'Meera Iyer', phone: '9765432109', city: 'Durg', society: 'Riverside Apartments', block: 'Block D', flat: 'D-11', residentType: 'Tenant', submittedAt: '2026-07-13', status: 'rejected', rejectionReason: 'Flat already has a registered resident' },
-  { id: '6', name: 'Karan Mehta', phone: '9345678901', city: 'Raipur', society: 'Ashiana Residency', block: 'Tower 2', flat: '201', residentType: 'Owner', submittedAt: '2026-07-13', status: 'pending' },
-  { id: '7', name: 'Sunita Rao', phone: '9456123789', city: 'Raipur', society: 'Shalimar Greens', block: 'Block A', flat: 'A-102', residentType: 'Tenant', submittedAt: '2026-07-12', status: 'approved' },
-  { id: '8', name: 'Vikram Singh', phone: '9234567810', city: 'Bilaspur', society: 'Green Valley Enclave', block: 'Wing C', flat: 'C-1', residentType: 'Owner', submittedAt: '2026-07-11', status: 'pending' },
-];
+export type ResidentRequest = RequestItem;
 
 type RequestsContextValue = {
   requests: ResidentRequest[];
+  isLoading: boolean;
+  error: string | null;
+  refresh: () => void;
   getById: (id: string) => ResidentRequest | undefined;
-  approve: (id: string) => void;
-  reject: (id: string, reason: string) => void;
+  approve: (id: string) => Promise<void>;
+  reject: (id: string, reason: string) => Promise<void>;
 };
 
 const RequestsContext = createContext<RequestsContextValue | undefined>(undefined);
 
 export function RequestsProvider({ children }: { children: React.ReactNode }) {
-  const [requests, setRequests] = useState<ResidentRequest[]>(INITIAL_REQUESTS);
+  const { session } = useAuth();
+  const [requests, setRequests] = useState<ResidentRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const societyId = session?.user?.societyId;
+
+  const fetchAll = useCallback(async () => {
+    if (!societyId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      // "keep it simple" approach: one large page, filter/search stays
+      // client-side in the dashboard exactly as it already did.
+      const result = await listRequests({ societyId, page: 1, limit: 20 });
+      setRequests(result.requests);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load requests.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [societyId]);
+
+  useEffect(() => {
+    if (session?.isAdmin && societyId) fetchAll();
+  }, [session?.isAdmin, societyId, fetchAll]);
 
   const value = useMemo<RequestsContextValue>(
     () => ({
       requests,
+      isLoading,
+      error,
+      refresh: fetchAll,
       getById: (id) => requests.find((r) => r.id === id),
-      approve: (id) =>
-        setRequests((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: 'approved', rejectionReason: undefined } : r))
-        ),
-      reject: (id, reason) =>
-        setRequests((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: 'rejected', rejectionReason: reason } : r))
-        ),
+      approve: async (id) => {
+        await approveRequest(id);
+        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'approved', rejectionReason: undefined } : r)));
+      },
+      reject: async (id, reason) => {
+        await rejectRequest(id, reason);
+        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'rejected', rejectionReason: reason } : r)));
+      },
     }),
-    [requests]
+    [requests, isLoading, error, fetchAll]
   );
 
   return <RequestsContext.Provider value={value}>{children}</RequestsContext.Provider>;

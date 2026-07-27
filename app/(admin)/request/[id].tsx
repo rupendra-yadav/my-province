@@ -32,6 +32,8 @@ export default function RequestDetailScreen() {
   const { getById, approve, reject } = useRequests();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const request = getById(id);
 
@@ -43,16 +45,32 @@ export default function RequestDetailScreen() {
     );
   }
 
-  const handleApprove = () => {
-    approve(request.id);
-    router.back();
+  const handleApprove = async () => {
+    setSubmitting(true);
+    setActionError('');
+    try {
+      await approve(request.id);
+      router.back();
+    } catch (err) {
+      setActionError('Could not approve this request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!reason.trim()) return;
-    reject(request.id, reason.trim());
-    setRejecting(false);
-    router.back();
+    setSubmitting(true);
+    setActionError('');
+    try {
+      await reject(request.id, reason.trim());
+      setRejecting(false);
+      router.back();
+    } catch (err) {
+      setActionError('Could not reject this request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -121,10 +139,18 @@ export default function RequestDetailScreen() {
           </FadeSlideIn>
         )}
 
+        {!!actionError && (
+          <FadeSlideIn>
+            <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.md }]}>
+              {actionError}
+            </Text>
+          </FadeSlideIn>
+        )}
+
         {request.status === 'pending' && (
           <FadeSlideIn delay={120} style={{ flexDirection: 'row', gap: spacing.md }}>
-            <GhostButton label="Reject" icon="close" onPress={() => setRejecting(true)} style={{ flex: 1 }} />
-            <PrimaryButton label="Approve" icon="checkmark" onPress={handleApprove} style={{ flex: 1 }} />
+            <GhostButton label="Reject" icon="close" onPress={() => !submitting && setRejecting(true)} style={{ flex: 1 }} />
+            <PrimaryButton label="Approve" icon="checkmark" loading={submitting} onPress={handleApprove} style={{ flex: 1 }} />
           </FadeSlideIn>
         )}
       </ScrollView>
@@ -175,6 +201,7 @@ export default function RequestDetailScreen() {
               <PrimaryButton
                 label="Confirm reject"
                 disabled={!reason.trim()}
+                loading={submitting}
                 onPress={handleReject}
                 style={{ flex: 1 }}
               />

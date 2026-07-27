@@ -1,23 +1,34 @@
 // app/(auth)/phone.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
+import { FadeSlideIn, IconBadge, PrimaryButton, ScreenHeading } from '../../components/ui';
 import { useTheme } from '../../context/ThemeContext';
-import { FadeSlideIn, PrimaryButton, ScreenHeading, IconBadge } from '../../components/ui';
+import { ApiError } from '../../lib/api';
+import { sendOtp } from '../../lib/endpoints';
 
 export default function PhoneScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (phone.length !== 10) {
       setError('Enter a valid 10-digit mobile number');
       return;
     }
     setError('');
-    router.push({ pathname: '/(auth)/otp', params: { phone } });
+    setSubmitting(true);
+    try {
+      await sendOtp(phone);
+      router.push({ pathname: '/(auth)/otp', params: { phone } });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send OTP. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -105,7 +116,7 @@ export default function PhoneScreen() {
         <View style={{ flex: 1 }} />
 
         <FadeSlideIn delay={160} style={{ marginBottom: spacing.xxl }}>
-          <PrimaryButton label="Send OTP" icon="arrow-forward" onPress={handleContinue} />
+          <PrimaryButton label="Send OTP" icon="arrow-forward" loading={submitting} onPress={handleContinue} />
         </FadeSlideIn>
       </View>
     </KeyboardAvoidingView>

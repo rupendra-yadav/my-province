@@ -1,5 +1,5 @@
 // app/(auth)/register.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,37 +9,21 @@ import {
   FlatList,
   Animated,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { FadeSlideIn, PrimaryButton, ScreenHeading, Card } from '../../components/ui';
-
-// ---- Dummy cascading data — swap for GET /locations once backend is wired ----
-const DUMMY_DATA = {
-  Raipur: {
-    'Shalimar Greens': {
-      'Block A': ['A-101', 'A-102', 'A-103'],
-      'Block B': ['B-201', 'B-202'],
-    },
-    'Ashiana Residency': {
-      'Tower 1': ['101', '102', '103'],
-      'Tower 2': ['201', '202'],
-    },
-  },
-  Bilaspur: {
-    'Green Valley Enclave': {
-      'Wing C': ['C-1', 'C-2', 'C-3'],
-    },
-  },
-  Durg: {
-    'Riverside Apartments': {
-      'Block D': ['D-11', 'D-12'],
-    },
-  },
-} as const;
-
-type FieldKey = 'city' | 'society' | 'block' | 'flat';
+import {
+  listDistricts,
+  listCitiesByDistrict,
+  listSocieties,
+  listBlocks,
+  listProperties,
+  registerUser,
+} from '../../lib/endpoints';
+import { ApiError } from '../../lib/api';
 
 function Dropdown({
   label,
@@ -47,6 +31,7 @@ function Dropdown({
   placeholder,
   options,
   disabled,
+  loading,
   onSelect,
 }: {
   label: string;
@@ -54,6 +39,7 @@ function Dropdown({
   placeholder: string;
   options: string[];
   disabled?: boolean;
+  loading?: boolean;
   onSelect: (v: string) => void;
 }) {
   const { colors, radius, spacing, typography } = useTheme();
@@ -65,7 +51,7 @@ function Dropdown({
         {label}
       </Text>
       <Pressable
-        disabled={disabled}
+        disabled={disabled || loading}
         onPress={() => setOpen(true)}
         style={{
           flexDirection: 'row',
@@ -87,7 +73,11 @@ function Dropdown({
         >
           {value || placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        {loading ? (
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        ) : (
+          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        )}
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -172,8 +162,6 @@ function OwnerTenantToggle({
     Animated.spring(anim, { toValue: v === 'Owner' ? 0 : 1, useNativeDriver: false, speed: 20 }).start();
   };
 
-  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-
   return (
     <View style={{ marginBottom: spacing.xl }}>
       <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.xs }]}>
@@ -204,12 +192,7 @@ function OwnerTenantToggle({
                   : {}),
               }}
             >
-              <Text
-                style={[
-                  typography.bodyMedium,
-                  { color: active ? colors.primary : colors.textMuted },
-                ]}
-              >
+              <Text style={[typography.bodyMedium, { color: active ? colors.primary : colors.textMuted }]}>
                 {option}
               </Text>
             </Pressable>
@@ -220,34 +203,192 @@ function OwnerTenantToggle({
   );
 }
 
+function LabeledInput({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  placeholder: string;
+  keyboardType?: 'default' | 'email-address';
+}) {
+  const { colors, spacing, typography } = useTheme();
+  return (
+    <>
+      <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.xs }]}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textMuted}
+        keyboardType={keyboardType ?? 'default'}
+        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'words'}
+        style={[
+          typography.bodyMedium,
+          {
+            color: colors.text,
+            borderWidth: 1.5,
+            borderColor: colors.border,
+            borderRadius: 14,
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.md,
+            marginBottom: spacing.lg,
+          },
+        ]}
+      />
+    </>
+  );
+}
+
+// Simple {id,label} pair used across every cascading level below.
+type Option = { id: string | number; label: string };
+
 export default function RegisterScreen() {
   const { colors, spacing, typography } = useTheme();
+
   const [name, setName] = useState('');
-  const [city, setCity] = useState('');
-  const [society, setSociety] = useState('');
-  const [block, setBlock] = useState('');
-  const [flat, setFlat] = useState('');
+  const [email, setEmail] = useState('');
+
+  const [districts, setDistricts] = useState<string[]>([]);
+  const [district, setDistrict] = useState('');
+
+  const [cities, setCities] = useState<Option[]>([]);
+  const [city, setCity] = useState<Option | null>(null);
+
+  const [societies, setSocieties] = useState<Option[]>([]);
+  const [society, setSociety] = useState<Option | null>(null);
+
+  const [blocks, setBlocks] = useState<Option[]>([]);
+  const [block, setBlock] = useState<Option | null>(null);
+
+  const [properties, setProperties] = useState<Option[]>([]);
+  const [flat, setFlat] = useState<Option | null>(null);
+
   const [residentType, setResidentType] = useState<'Owner' | 'Tenant'>('Owner');
 
-  const cities = Object.keys(DUMMY_DATA);
-  const societies = city ? Object.keys((DUMMY_DATA as any)[city]) : [];
-  const blocks = city && society ? Object.keys((DUMMY_DATA as any)[city][society]) : [];
-  const flats = city && society && block ? (DUMMY_DATA as any)[city][society][block] : [];
+  const [loadingLevel, setLoadingLevel] = useState<'' | 'cities' | 'societies' | 'blocks' | 'properties'>('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const resetFrom = (field: FieldKey) => {
-    if (field === 'city') {
-      setSociety('');
-      setBlock('');
-      setFlat('');
-    } else if (field === 'society') {
-      setBlock('');
-      setFlat('');
-    } else if (field === 'block') {
-      setFlat('');
+  // Districts load once on mount.
+  useEffect(() => {
+    listDistricts()
+      .then((res) => setDistricts(res.districts))
+      .catch(() => setError('Could not load districts. Pull to retry.'));
+  }, []);
+
+  const selectDistrict = async (value: string) => {
+    setDistrict(value);
+    setCity(null);
+    setSociety(null);
+    setBlock(null);
+    setFlat(null);
+    setSocieties([]);
+    setBlocks([]);
+    setProperties([]);
+    setLoadingLevel('cities');
+    try {
+      const res = await listCitiesByDistrict(value);
+      setCities(res.cities.map((c) => ({ id: c.id, label: c.name })));
+    } catch {
+      setError('Could not load cities for this district.');
+    } finally {
+      setLoadingLevel('');
     }
   };
 
-  const canSubmit = name.trim().length > 1 && city && society && block && flat;
+  const selectCity = async (label: string) => {
+    const selected = cities.find((c) => c.label === label) ?? null;
+    setCity(selected);
+    setSociety(null);
+    setBlock(null);
+    setFlat(null);
+    setBlocks([]);
+    setProperties([]);
+    if (!selected) return;
+    setLoadingLevel('societies');
+    try {
+      const res = await listSocieties(String(selected.id));
+      setSocieties(res.societies.map((s) => ({ id: s.id, label: s.name })));
+    } catch {
+      setError('Could not load societies for this city.');
+    } finally {
+      setLoadingLevel('');
+    }
+  };
+
+  const selectSociety = async (label: string) => {
+    const selected = societies.find((s) => s.label === label) ?? null;
+    setSociety(selected);
+    setBlock(null);
+    setFlat(null);
+    setProperties([]);
+    if (!selected) return;
+    setLoadingLevel('blocks');
+    try {
+      const res = await listBlocks(Number(selected.id));
+      setBlocks(res.blocks.map((b) => ({ id: b.id, label: b.buildingName })));
+    } catch {
+      setError('Could not load blocks for this society.');
+    } finally {
+      setLoadingLevel('');
+    }
+  };
+
+  const selectBlock = async (label: string) => {
+    const selected = blocks.find((b) => b.label === label) ?? null;
+    setBlock(selected);
+    setFlat(null);
+    if (!selected || !society) return;
+    setLoadingLevel('properties');
+    try {
+      const res = await listProperties(Number(society.id), Number(selected.id));
+      // Only vacant flats are selectable — the backend would reject an
+      // occupied one anyway, so filter here for a cleaner picking experience.
+      setProperties(
+        res.properties.filter((p) => p.status === 'vacant').map((p) => ({ id: p.id, label: p.unitNumber }))
+      );
+    } catch {
+      setError('Could not load flats for this block.');
+    } finally {
+      setLoadingLevel('');
+    }
+  };
+
+  const canSubmit =
+    name.trim().length > 1 &&
+    /\S+@\S+\.\S+/.test(email) &&
+    district &&
+    city &&
+    society &&
+    block &&
+    flat &&
+    !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !society || !flat) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      await registerUser({
+        name: name.trim(),
+        email: email.trim(),
+        societyId: Number(society.id),
+        unitId: Number(flat.id),
+        memberType: residentType === 'Owner' ? 'owner' : 'tenant',
+        city: city?.label,
+      });
+      router.replace('/(auth)/pending');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not submit registration. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -264,79 +405,78 @@ export default function RegisterScreen() {
 
       <FadeSlideIn delay={80}>
         <Card>
-          <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.xs }]}>
-            Full name
-          </Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Anita Sharma"
-            placeholderTextColor={colors.textMuted}
-            style={[
-              typography.bodyMedium,
-              {
-                color: colors.text,
-                borderWidth: 1.5,
-                borderColor: colors.border,
-                borderRadius: 14,
-                paddingHorizontal: spacing.lg,
-                paddingVertical: spacing.md,
-                marginBottom: spacing.lg,
-              },
-            ]}
+          <LabeledInput label="Full name" value={name} onChangeText={setName} placeholder="e.g. Anita Sharma" />
+          <LabeledInput
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="e.g. anita@example.com"
+            keyboardType="email-address"
           />
 
           <Dropdown
+            label="District"
+            value={district}
+            placeholder="Select district"
+            options={districts}
+            onSelect={selectDistrict}
+          />
+          <Dropdown
             label="City"
-            value={city}
-            placeholder="Select city"
-            options={cities}
-            onSelect={(v) => {
-              setCity(v);
-              resetFrom('city');
-            }}
+            value={city?.label ?? ''}
+            placeholder={district ? 'Select city' : 'Select district first'}
+            options={cities.map((c) => c.label)}
+            disabled={!district}
+            loading={loadingLevel === 'cities'}
+            onSelect={selectCity}
           />
           <Dropdown
             label="Society"
-            value={society}
+            value={society?.label ?? ''}
             placeholder={city ? 'Select society' : 'Select city first'}
-            options={societies}
+            options={societies.map((s) => s.label)}
             disabled={!city}
-            onSelect={(v) => {
-              setSociety(v);
-              resetFrom('society');
-            }}
+            loading={loadingLevel === 'societies'}
+            onSelect={selectSociety}
           />
           <Dropdown
             label="Block / Tower"
-            value={block}
+            value={block?.label ?? ''}
             placeholder={society ? 'Select block' : 'Select society first'}
-            options={blocks}
+            options={blocks.map((b) => b.label)}
             disabled={!society}
-            onSelect={(v) => {
-              setBlock(v);
-              resetFrom('block');
-            }}
+            loading={loadingLevel === 'blocks'}
+            onSelect={selectBlock}
           />
           <Dropdown
             label="Flat number"
-            value={flat}
+            value={flat?.label ?? ''}
             placeholder={block ? 'Select flat' : 'Select block first'}
-            options={flats}
+            options={properties.map((p) => p.label)}
             disabled={!block}
-            onSelect={setFlat}
+            loading={loadingLevel === 'properties'}
+            onSelect={(label) => setFlat(properties.find((p) => p.label === label) ?? null)}
           />
 
           <OwnerTenantToggle value={residentType} onChange={setResidentType} />
         </Card>
       </FadeSlideIn>
 
+      {!!error && (
+        <FadeSlideIn>
+          <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.md, textAlign: 'center' }]}>
+            {error}
+          </Text>
+        </FadeSlideIn>
+      )}
+
       <FadeSlideIn delay={140} style={{ marginTop: spacing.xl }}>
         <PrimaryButton
           label="Submit for approval"
           icon="paper-plane"
           disabled={!canSubmit}
-          onPress={() => router.push('/(auth)/pending')}
+          loading={submitting}
+          onPress={handleSubmit}
         />
       </FadeSlideIn>
     </ScrollView>

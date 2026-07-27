@@ -1,6 +1,6 @@
 // app/(admin)/dashboard.tsx
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, Pressable } from 'react-native';
+import { View, Text, FlatList, TextInput, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
@@ -64,7 +64,7 @@ function RequestCard({ item, onPress }: { item: ResidentRequest; onPress: () => 
 
 export default function AdminDashboard() {
   const { colors, spacing, radius, typography } = useTheme();
-  const { requests } = useRequests();
+  const { requests, isLoading, refresh } = useRequests();
   const [filter, setFilter] = useState<Filter>('pending');
   const [query, setQuery] = useState('');
 
@@ -146,17 +146,24 @@ export default function AdminDashboard() {
         data={filtered}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xxxl }}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} tintColor={colors.textMuted} />}
         renderItem={({ item, index }) => (
           <FadeSlideIn delay={Math.min(index, 6) * 30}>
-            <RequestCard item={item} onPress={() => router.push(`/(admin)/request/${item.id}`)} />
+            <RequestCard item={item} onPress={() => router.push(`/(admin)/request/${item.id}` as any)} />
           </FadeSlideIn>
         )}
         ListEmptyComponent={
           <View style={{ alignItems: 'center', paddingTop: spacing.xxxl }}>
-            <Ionicons name="checkmark-done-outline" size={28} color={colors.textMuted} />
-            <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
-              Nothing here right now
-            </Text>
+            {isLoading ? (
+              <ActivityIndicator color={colors.textMuted} />
+            ) : (
+              <>
+                <Ionicons name="checkmark-done-outline" size={28} color={colors.textMuted} />
+                <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
+                  Nothing here right now
+                </Text>
+              </>
+            )}
           </View>
         }
       />
