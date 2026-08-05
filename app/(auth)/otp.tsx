@@ -1,12 +1,12 @@
 // app/(auth)/otp.tsx
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useTheme } from '../../context/ThemeContext';
+import { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { FadeSlideIn, IconBadge, PrimaryButton, ScreenHeading } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
-import { verifyOtp, sendOtp } from '../../lib/endpoints';
-import { ApiError } from '../../lib/api';
-import { FadeSlideIn, PrimaryButton, ScreenHeading, IconBadge } from '../../components/ui';
+import { useTheme } from '../../context/ThemeContext';
+import { ApiError } from '../../services/api';
+import { sendOtp, verifyOtp } from '../../services/endpoints';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 30;
@@ -62,7 +62,9 @@ export default function OtpScreen() {
       await login(result);
 
       if (result.isAdmin) {
-        router.replace('/(admin)/dashboard');
+        // Admins land on the same shared dashboard as residents; the
+        // Admin Console card on that screen leads into (admin)/requests.
+        router.replace('/(main)/dashboard' as any);
       } else if (!result.isRegistered) {
         // Covers both "never registered" and "previously rejected" —
         // both resubmit through the same registration screen.
@@ -70,8 +72,8 @@ export default function OtpScreen() {
       } else if (result.requestStatus === 'pending') {
         router.replace('/(auth)/pending');
       } else {
-        // approved resident — no resident home screen built yet
-        router.replace('/(auth)/pending');
+        // approved resident
+        router.replace('/(main)/dashboard' as any);
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -87,69 +89,83 @@ export default function OtpScreen() {
   const isComplete = digits.every((d) => d !== '');
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
-      <FadeSlideIn>
-        <IconBadge name="chatbubble-ellipses-outline" size={52} emphasis />
-        <ScreenHeading
-          title="Enter the code"
-          subtitle={`We've sent a 6-digit code to +91 ${phone ?? ''}`}
-          style={{ marginTop: spacing.lg }}
-        />
-      </FadeSlideIn>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? spacing.xxxl : 0}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingHorizontal: spacing.xl,
+          paddingTop: spacing.xxxl,
+          paddingBottom: spacing.xxl,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <FadeSlideIn>
+          <IconBadge name="chatbubble-ellipses-outline" size={52} emphasis />
+          <ScreenHeading
+            title="Enter the code"
+            subtitle={`We've sent a 6-digit code to +91 ${phone ?? ''}`}
+            style={{ marginTop: spacing.lg }}
+          />
+        </FadeSlideIn>
 
-      <FadeSlideIn delay={100}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          {digits.map((digit, i) => (
-            <TextInput
-              key={i}
-              ref={(el) => {
-                inputs.current[i] = el;
-              }}
-              value={digit}
-              onChangeText={(t) => handleChange(t, i)}
-              onKeyPress={(e) => handleKeyPress(e, i)}
-              keyboardType="number-pad"
-              maxLength={1}
-              style={{
-                width: 46,
-                height: 56,
-                borderRadius: radius.md,
-                borderWidth: 1,
-                borderColor: error ? colors.danger : digit ? colors.primary : colors.border,
-                backgroundColor: colors.surface,
-                textAlign: 'center',
-                fontSize: 20,
-                fontWeight: '600',
-                color: colors.text,
-              }}
-            />
-          ))}
-        </View>
+        <FadeSlideIn delay={100}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            {digits.map((digit, i) => (
+              <TextInput
+                key={i}
+                ref={(el) => {
+                  inputs.current[i] = el;
+                }}
+                value={digit}
+                onChangeText={(t) => handleChange(t, i)}
+                onKeyPress={(e) => handleKeyPress(e, i)}
+                keyboardType="number-pad"
+                maxLength={1}
+                style={{
+                  width: 46,
+                  height: 56,
+                  borderRadius: radius.md,
+                  borderWidth: 1,
+                  borderColor: error ? colors.danger : digit ? colors.primary : colors.border,
+                  backgroundColor: colors.surface,
+                  textAlign: 'center',
+                  fontSize: 20,
+                  fontWeight: '600',
+                  color: colors.text,
+                }}
+              />
+            ))}
+          </View>
 
-        {!!error && (
-          <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.sm, textAlign: 'center' }]}>
-            {error}
-          </Text>
-        )}
+          {!!error && (
+            <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.sm, textAlign: 'center' }]}>
+              {error}
+            </Text>
+          )}
 
-        <Pressable disabled={seconds > 0} onPress={handleResend} style={{ marginTop: spacing.lg, alignSelf: 'center' }}>
-          <Text style={[typography.caption, { color: seconds > 0 ? colors.textMuted : colors.primary }]}>
-            {seconds > 0 ? `Resend code in 0:${seconds.toString().padStart(2, '0')}` : 'Resend code'}
-          </Text>
-        </Pressable>
-      </FadeSlideIn>
+          <Pressable disabled={seconds > 0} onPress={handleResend} style={{ marginTop: spacing.lg, alignSelf: 'center' }}>
+            <Text style={[typography.caption, { color: seconds > 0 ? colors.textMuted : colors.primary }]}>
+              {seconds > 0 ? `Resend code in 0:${seconds.toString().padStart(2, '0')}` : 'Resend code'}
+            </Text>
+          </Pressable>
+        </FadeSlideIn>
 
-      <View style={{ flex: 1 }} />
+        <View style={{ flex: 1, minHeight: spacing.xxl }} />
 
-      <FadeSlideIn delay={160} style={{ marginBottom: spacing.xxl }}>
-        <PrimaryButton
-          label="Verify"
-          icon="checkmark"
-          disabled={!isComplete}
-          loading={submitting}
-          onPress={handleVerify}
-        />
-      </FadeSlideIn>
-    </View>
+        <FadeSlideIn delay={160}>
+          <PrimaryButton
+            label="Verify"
+            icon="checkmark"
+            disabled={!isComplete}
+            loading={submitting}
+            onPress={handleVerify}
+          />
+        </FadeSlideIn>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

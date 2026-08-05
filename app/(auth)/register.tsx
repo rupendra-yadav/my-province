@@ -1,29 +1,29 @@
 // app/(auth)/register.tsx
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  Modal,
-  FlatList,
-  Animated,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useTheme } from '../../context/ThemeContext';
-import { FadeSlideIn, PrimaryButton, ScreenHeading, Card } from '../../components/ui';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  listDistricts,
-  listCitiesByDistrict,
-  listSocieties,
+  ActivityIndicator,
+  Animated,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Card, FadeSlideIn, PrimaryButton, ScreenHeading } from '../../components/ui';
+import { useTheme } from '../../context/ThemeContext';
+import { ApiError } from '../../services/api';
+import {
   listBlocks,
+  listCitiesByDistrict,
+  listDistricts,
   listProperties,
+  listSocieties,
   registerUser,
-} from '../../lib/endpoints';
-import { ApiError } from '../../lib/api';
+} from '../../services/endpoints';
 
 function Dropdown({
   label,
@@ -405,12 +405,12 @@ export default function RegisterScreen() {
 
       <FadeSlideIn delay={80}>
         <Card>
-          <LabeledInput label="Full name" value={name} onChangeText={setName} placeholder="e.g. Anita Sharma" />
+          <LabeledInput label="Full name" value={name} onChangeText={setName} placeholder="Enter full name" />
           <LabeledInput
             label="Email"
             value={email}
             onChangeText={setEmail}
-            placeholder="e.g. anita@example.com"
+            placeholder="example@email.com"
             keyboardType="email-address"
           />
 

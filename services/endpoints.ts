@@ -1,8 +1,3 @@
-// lib/endpoints.ts
-// Typed wrappers around each backend endpoint. Screens import from here,
-// never call `api`/`apiFetch` directly — keeps request/response shapes
-// in one place if the backend contract ever changes.
-
 import { api } from './api';
 
 // ---- Auth ----------------------------------------------------------
@@ -103,3 +98,66 @@ export const approveRequest = (id: string) => api.patch<{ id: string; approvedSt
 
 export const rejectRequest = (id: string, reason: string) =>
   api.patch<{ id: string; approvedStatus: string }>(`/requests/${id}/reject`, { reason });
+
+// ---- Payments ---------------------------------------------------------
+
+export interface PaymentPeriodDto {
+  id: string;
+  type: 'maintenance' | 'membership';
+  period: string;
+  label: string;
+  due: number;
+  paid: number;
+  fine: number;
+  balance: number;
+  status: 'paid' | 'pending' | 'not_paid';
+  paidDate?: string;
+}
+
+export const listPayments = () =>
+  api.get<{ maintenance: PaymentPeriodDto[]; membership: PaymentPeriodDto[] }>('/payments');
+
+export const payPeriod = (id: string) => api.post<never>(`/payments/${id}/pay`);
+
+// ---- Session validation -----------------------------------------------
+
+export interface ValidateTokenResult {
+  valid: boolean;
+  user?: { id: string; name: string; email: string; phone: string; societyId: number };
+  isAdmin?: boolean;
+}
+
+// lib/endpoints.ts
+
+export const validateToken = () =>
+  api.get<ValidateTokenResult>('/auth/validate');
+export interface RefreshTokenResult {
+  accessToken: string;
+  refreshToken: string | null;
+  user?: { id: string; name: string; email: string; phone: string; societyId: number };
+  isAdmin?: boolean;
+}
+
+export const refreshAccessToken = (refreshToken: string) =>
+  api.post<RefreshTokenResult>('/auth/refresh', { refreshToken }, { auth: false });
+
+// ---- Full profile (separate from login payload) ------------------------
+
+export interface MeResult {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  isAdmin: boolean;
+  memberType: 'owner' | 'tenant' | 'family_member' | null;
+  city: string | null;
+  pincode: string | null;
+  address: string | null;
+  society: { id: number; name: string } | null;
+  block: { id: number; buildingName: string } | null;
+  flat: { id: number; unitNumber: string } | null;
+}
+
+export const getMe = () => api.get<MeResult>('/auth/me');
+
+export const logout = () => api.post<never>('/auth/logout');

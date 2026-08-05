@@ -2,11 +2,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { FadeSlideIn, IconBadge, PrimaryButton, ScreenHeading } from '../../components/ui';
 import { useTheme } from '../../context/ThemeContext';
-import { ApiError } from '../../lib/api';
-import { sendOtp } from '../../lib/endpoints';
+import { ApiError } from '../../services/api';
+import { sendOtp } from '../../services/endpoints';
 
 export default function PhoneScreen() {
   const { colors, spacing, radius, typography } = useTheme();
@@ -34,9 +34,18 @@ export default function PhoneScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? spacing.xxxl : 0}
     >
-      <View style={{ flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingHorizontal: spacing.xl,
+          paddingTop: spacing.xxxl,
+          paddingBottom: spacing.xxl,
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
         <FadeSlideIn>
           <IconBadge name="call-outline" size={52} />
           <ScreenHeading
@@ -93,7 +102,7 @@ export default function PhoneScreen() {
               }}
               keyboardType="number-pad"
               maxLength={10}
-              placeholder="98765 43210"
+              placeholder="Enter your mobile number"
               placeholderTextColor={colors.textMuted}
               style={[
                 typography.bodyMedium,
@@ -113,12 +122,12 @@ export default function PhoneScreen() {
           )}
         </FadeSlideIn>
 
-        <View style={{ flex: 1 }} />
+        <View style={{ flex: 1, minHeight: spacing.xxl }} />
 
-        <FadeSlideIn delay={160} style={{ marginBottom: spacing.xxl }}>
+        <FadeSlideIn delay={160}>
           <PrimaryButton label="Send OTP" icon="arrow-forward" loading={submitting} onPress={handleContinue} />
         </FadeSlideIn>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

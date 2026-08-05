@@ -1,9 +1,10 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ThemeProvider, useTheme } from '../context/ThemeContext';
-import { RequestsProvider } from '../context/RequestsContext';
 import { AuthProvider } from '../context/AuthContext';
+import { PaymentsProvider } from '../context/PaymentsContext';
+import { RequestsProvider } from '../context/RequestsContext';
+import { ThemeProvider, useTheme } from '../context/ThemeContext';
 
 function RootStack() {
   const { isDark, colors } = useTheme();
@@ -11,13 +12,16 @@ function RootStack() {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
+        initialRouteName="index"
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
           animation: 'slide_from_right',
         }}
       >
+        <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(main)" />
         <Stack.Screen name="(admin)" />
       </Stack>
     </>
@@ -29,7 +33,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <RequestsProvider>
-          <RootStack />
+          <PaymentsProvider>
+            <RootStack />
+          </PaymentsProvider>
         </RequestsProvider>
       </AuthProvider>
     </ThemeProvider>

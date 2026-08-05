@@ -4,8 +4,8 @@
 // original design of this seam.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { ApiError } from '../lib/api';
-import { approveRequest, listRequests, rejectRequest, RequestItem } from '../lib/endpoints';
+import { ApiError } from '../services/api';
+import { approveRequest, listRequests, rejectRequest, RequestItem } from '../services/endpoints';
 import { useAuth } from './AuthContext';
 
 export type ResidentRequest = RequestItem;

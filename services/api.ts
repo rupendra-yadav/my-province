@@ -1,4 +1,4 @@
-// lib/api.ts
+// services/api.ts
 // Single shared API client, using axios. Every screen should call
 // `apiFetch` (or the small helpers below) rather than using axios
 // directly, so the auth header, envelope-unwrapping, and error shape
@@ -11,7 +11,7 @@ import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './auth
 //   EXPO_PUBLIC_API_URL=http://192.168.1.5/api/parisar/api/v1
 // Use your machine's LAN IP for physical devices, 10.0.2.2 for the
 // Android emulator, or localhost for the iOS simulator.
-const BASE_URL =  'http://192.168.123.81/api/parisar/api/v1';
+const BASE_URL =  'http://192.168.122.140/api/parisar/api/v1';
 
 export class ApiError extends Error {
   code: number;
@@ -57,7 +57,6 @@ const client = axios.create({
 async function rawRequest<T>(path: string, options: RequestOptions): Promise<Envelope<T>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  console.log('rawRequest');
   if (options.auth !== false) {
     const token = await getAccessToken();
     if (token) headers.Authorization = `Bearer ${token}`;

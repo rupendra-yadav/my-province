@@ -1,9 +1,8 @@
 // app/(auth)/pending.tsx
-import React from 'react';
-import { View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Text, View } from 'react-native';
+import { Card, FadeSlideIn, IconBadge, SoftPulse } from '../../components/ui';
 import { useTheme } from '../../context/ThemeContext';
-import { Card, FadeSlideIn, GhostButton, IconBadge, SoftPulse } from '../../components/ui';
 
 const STEPS = [
   { label: 'Details submitted', done: true },
@@ -83,7 +82,12 @@ export default function PendingScreen() {
       <View style={{ flex: 1 }} />
 
       <FadeSlideIn delay={200} style={{ marginBottom: spacing.xxl }}>
-        <GhostButton label="Back to home" icon="home" onPress={() => {}} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={[typography.bodyMedium, { color: colors.text, marginRight: spacing.md }]}>
+            You will be able access the app after approval.
+          </Text>
+         
+        </View>
       </FadeSlideIn>
     </View>
   );

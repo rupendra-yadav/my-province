@@ -12,7 +12,7 @@ export default function AdminLayout() {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="dashboard" />
+      <Stack.Screen name="requests" />
       <Stack.Screen name="request/[id]" options={{ animation: 'slide_from_bottom' }} />
     </Stack>
   );

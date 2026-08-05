@@ -3,18 +3,25 @@
 // not shadows. Motion = calm crossfades, not springs or bounces.
 // Keep screens thin — compose these instead of writing raw styling per screen.
 
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Animated,
   Pressable,
   StyleSheet,
-  Animated,
-  ActivityIndicator,
+  Text,
+  View,
   ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import type { PaymentPeriod, PaymentStatus } from '../context/PaymentsContext';
 import { useTheme } from '../context/ThemeContext';
+
+// ---------- formatINR: shared currency formatting, negative = credit ----------
+export function formatINR(amount: number) {
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}₹${Math.abs(amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
+}
 
 // ---------- FadeIn: quiet entrance, no vertical bounce — a slight rise only ----------
 export function FadeSlideIn({
@@ -271,6 +278,149 @@ export function StatusChip({ status }: { status: 'pending' | 'approved' | 'rejec
   );
 }
 
+// ---------- PaymentStatusChip: same visual language as StatusChip, payment states ----------
+export function PaymentStatusChip({ status }: { status: 'paid' | 'pending' | 'not_paid' }) {
+  const { colors, radius, spacing, typography } = useTheme();
+  const map = {
+    paid: { bg: colors.successBg, fg: colors.success, label: 'Paid' },
+    pending: { bg: colors.warningBg, fg: colors.warning, label: 'Pending' },
+    not_paid: { bg: colors.dangerBg, fg: colors.danger, label: 'Not paid' },
+  }[status];
+
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        backgroundColor: map.bg,
+        borderRadius: radius.sm,
+        paddingHorizontal: spacing.sm + 2,
+        paddingVertical: 3,
+      }}
+    >
+      <Text style={[typography.tiny, { color: map.fg, letterSpacing: 0.4 }]}>
+        {map.label.toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+// ---------- PaymentHistoryRow: paid-only entry — month, paid date, paid amount ----------
+export function PaymentHistoryRow({
+  item,
+  showType = false,
+  isLast = false,
+}: {
+  item: PaymentPeriod;
+  showType?: boolean; // prefix with "Maintenance ·" / "Membership ·" — dashboard mixes both, payment screen doesn't need to
+  isLast?: boolean;
+}) {
+  const { colors, spacing, typography } = useTheme();
+  const feeLabel = item.type === 'maintenance' ? 'Maintenance' : 'Membership';
+  const paidDate = item.paidDate
+    ? new Date(item.paidDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '';
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        borderBottomWidth: isLast ? 1 : 0,
+        borderBottomColor: colors.border,
+      }}
+    >
+      <View>
+        <Text style={[typography.bodyMedium, { color: colors.text }]}>
+          {showType ? `${feeLabel} · ${item.label}` : item.label}
+        </Text>
+        <Text style={[typography.tiny, { color: colors.textMuted, marginTop: 2 }]}>Paid on {paidDate}</Text>
+      </View>
+      <Text style={[typography.bodyMedium, { color: colors.text }]}>{formatINR(item.paid)}</Text>
+    </View>
+  );
+}
+
+// ---------- TransactionHistoryCard: full detail — status badge + due/paid/fine/balance grid ----------
+// Used on the payment screen's full history (all statuses). PaymentHistoryRow
+// above stays as the compact paid-only row for the dashboard recap.
+export function TransactionHistoryCard({
+  item,
+  showType = false,
+}: {
+  item: PaymentPeriod;
+  showType?: boolean; // prefix with "Maintenance ·" / "Membership ·"
+}) {
+  const { colors, radius, spacing, typography } = useTheme();
+  const feeLabel = item.type === 'maintenance' ? 'Maintenance' : 'Membership';
+
+  const statusMap: Record<PaymentStatus, { label: string; fg: string; bg: string }> = {
+    paid: { label: 'Paid', fg: colors.success, bg: colors.successBg },
+    pending: { label: 'Pending', fg: colors.warning, bg: colors.warningBg },
+    not_paid: { label: 'Not paid', fg: colors.danger, bg: colors.dangerBg },
+  };
+  const status = statusMap[item.status];
+  const balanceColor = item.balance > 0 ? colors.danger : colors.success;
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: spacing.md,
+        }}
+      >
+        <Text style={[typography.body, { color: colors.text }]}>
+          {showType ? `${feeLabel} · ${item.label}` : item.label}
+        </Text>
+        <View
+          style={{
+            backgroundColor: status.bg,
+            borderRadius: radius.pill,
+            paddingVertical: 3,
+            paddingHorizontal: spacing.sm,
+          }}
+        >
+          <Text style={[typography.tiny, { color: status.fg }]}>{status.label}</Text>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 2 }]}>Due</Text>
+          <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.due)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 2 }]}>Paid</Text>
+          <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.paid)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 2 }]}>Fine</Text>
+          <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.fine)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 2 }]}>Balance</Text>
+          <Text style={[typography.caption, { color: balanceColor }]}>{formatINR(item.balance)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ---------- SegmentedTabs: quiet filter row with counts ----------
 export function SegmentedTabs<T extends string>({
   options,
@@ -281,9 +431,24 @@ export function SegmentedTabs<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
-  const { colors, radius, spacing, typography } = useTheme();
+  const { colors, radius, spacing, typography, isDark } = useTheme();
+
+  const trackBg = isDark ? 'rgba(255,255,255,0.08)' : colors.primaryMuted;
+  const activeBg = isDark ? 'rgba(255,255,255,0.14)' : colors.surface;
+  const activeBorder = isDark ? 'rgba(255,255,255,0.16)' : colors.border;
+  const badgeActiveBg = isDark ? colors.accent : colors.accent;
+  const badgeInactiveBg = isDark ? 'rgba(255,255,255,0.12)' : colors.border;
+  const badgeInactiveText = isDark ? colors.textMuted : colors.textMuted;
+
   return (
-    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        backgroundColor: trackBg,
+        borderRadius: radius.lg,
+        padding: 4,
+      }}
+    >
       {options.map((opt) => {
         const active = opt.key === value;
         return (
@@ -291,23 +456,48 @@ export function SegmentedTabs<T extends string>({
             key={opt.key}
             onPress={() => onChange(opt.key)}
             style={{
-              paddingHorizontal: spacing.md,
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
               paddingVertical: spacing.sm,
-              borderRadius: radius.pill,
-              borderWidth: 1,
-              borderColor: active ? colors.primary : colors.border,
-              backgroundColor: active ? colors.primary : 'transparent',
+              borderRadius: radius.md,
+              backgroundColor: active ? activeBg : 'transparent',
+              borderWidth: active ? 1 : 0,
+              borderColor: activeBorder,
             }}
           >
             <Text
               style={[
                 typography.caption,
-                { color: active ? colors.onPrimary : colors.textMuted },
+                { color: active ? colors.text : colors.textMuted, fontWeight: active ? ('500' as const) : ('400' as const) },
               ]}
             >
               {opt.label}
-              {opt.count !== undefined ? `  ${opt.count}` : ''}
             </Text>
+            {opt.count !== undefined && (
+              <View
+                style={{
+                  marginLeft: 6,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 5,
+                  borderRadius: 9,
+                  backgroundColor: active ? badgeActiveBg : badgeInactiveBg,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text
+                  style={[
+                    typography.tiny,
+                    { color: active ? colors.onPrimary : badgeInactiveText, fontWeight: '500' as const, fontSize: 11 },
+                  ]}
+                >
+                  {opt.count}
+                </Text>
+              </View>
+            )}
           </Pressable>
         );
       })}

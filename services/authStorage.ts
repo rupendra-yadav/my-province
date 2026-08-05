@@ -1,8 +1,3 @@
-// lib/authStorage.ts
-// Wraps expo-secure-store for persisting JWT tokens AND basic session
-// info (isAdmin, societyId, etc.) across app restarts.
-// Requires: npx expo install expo-secure-store
-
 import * as SecureStore from 'expo-secure-store';
 
 const ACCESS_TOKEN_KEY = 'mp_access_token';
@@ -11,10 +6,27 @@ const SESSION_KEY = 'mp_session';
 
 export interface StoredSession {
   isAdmin: boolean;
-  user: { id: string; name: string; email: string; phone: string; societyId: number } | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    societyId: number;
+    // Populated later by AuthContext's background GET /auth/me fetch —
+    // absent right after login, present once that resolves. Flattened
+    // (not nested) to match how profile.tsx already reads these.
+    memberType?: string | null;
+    city?: string | null;
+    pincode?: string | null;
+    address?: string | null;
+    society?: string | null;
+    block?: string | null;
+    flat?: string | null;
+  } | null;
 }
 
 export async function saveTokens(accessToken: string, refreshToken: string | null) {
+  console.log('saveTokens', accessToken, refreshToken);
   await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
   if (refreshToken) {
     await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
@@ -31,8 +43,6 @@ export async function getRefreshToken() {
   return SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
 }
 
-// TODO: once GET /auth/me exists on the backend, prefer calling that on
-// app boot for fresh data instead of relying solely on this cached copy.
 export async function saveSession(session: StoredSession) {
   await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
 }
