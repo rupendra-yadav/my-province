@@ -121,25 +121,26 @@ export const payPeriod = (id: string) => api.post<never>(`/payments/${id}/pay`);
 
 // ---- Session validation -----------------------------------------------
 
-export interface ValidateTokenResult {
-  valid: boolean;
-  user?: { id: string; name: string; email: string; phone: string; societyId: number };
-  isAdmin?: boolean;
+// ---- Session bundle (shared shape across verify-otp / validate / refresh) --
+
+export interface SessionBundle {
+  isAdmin: boolean;
+  isRegistered: boolean;
+  requestStatus: 'pending' | 'approved' | 'rejected' | null;
+  user: { id: string; name: string; email: string; phone: string; societyId: number } | null;
 }
 
-// lib/endpoints.ts
-
-export const validateToken = () =>
-  api.get<ValidateTokenResult>('/auth/validate');
-export interface RefreshTokenResult {
-  accessToken: string;
-  refreshToken: string | null;
-  user?: { id: string; name: string; email: string; phone: string; societyId: number };
-  isAdmin?: boolean;
+export interface RefreshResult extends SessionBundle {
+  tokens: { accessToken: string; refreshToken: string | null };
 }
+
+// Confirm this path matches your auth.routes.ts — controller function is
+// validateToken, route may be registered as GET /auth/validate or
+// POST /auth/validate-token depending on what you wired up.
+export const validateToken = () => api.get<SessionBundle>('/auth/validate');
 
 export const refreshAccessToken = (refreshToken: string) =>
-  api.post<RefreshTokenResult>('/auth/refresh', { refreshToken }, { auth: false });
+  api.post<RefreshResult>('/auth/refresh', { refreshToken }, { auth: false });
 
 // ---- Full profile (separate from login payload) ------------------------
 

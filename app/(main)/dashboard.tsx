@@ -156,12 +156,14 @@ export default function DashboardScreen() {
             delay={100}
             style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md }}
           >
-            <StatCard label="Payable" value={totalDue} icon="wallet-outline" />
-            <StatCard label="Paid" value={totalPaid} icon="checkmark-circle-outline" />
-            <StatCard label="Maintenance charge" value={maintenanceDue} icon="home-outline" />
+            <StatCard label="Total payable" value={totalDue} icon="wallet-outline" />
+            <StatCard label="Total paid" value={totalPaid} icon="checkmark-circle-outline" />
+            <StatCard label="Maintenance payable" value={maintenanceDue} icon="home-outline" />
             <StatCard label="Maintenance paid" value={maintenancePaid} icon="construct-outline" />
-            <StatCard label="Donations paid" value={donationsPaid} icon="heart-outline" />
+            <StatCard label="Membership payable" value={donationsDue} icon="heart-outline" />
+            <StatCard label="Membership paid" value={donationsPaid} icon="heart-outline" />
             <StatCard label="Balance" value={balance} icon="alert-circle-outline" emphasis="accent" />
+            <StatCard label="Donations paid" value={donationsPaid} icon="heart-outline" />
           </FadeSlideIn>
         )}
       </ScrollView>

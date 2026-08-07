@@ -1,10 +1,12 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '../context/AuthContext';
 import { PaymentsProvider } from '../context/PaymentsContext';
 import { RequestsProvider } from '../context/RequestsContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
+SplashScreen.preventAutoHideAsync();
 
 function RootStack() {
   const { isDark, colors } = useTheme();

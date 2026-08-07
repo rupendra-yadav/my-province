@@ -6,15 +6,14 @@ const SESSION_KEY = 'mp_session';
 
 export interface StoredSession {
   isAdmin: boolean;
+  isRegistered: boolean;
+  requestStatus: 'pending' | 'approved' | 'rejected' | null;
   user: {
     id: string;
     name: string;
     email: string;
     phone: string;
     societyId: number;
-    // Populated later by AuthContext's background GET /auth/me fetch —
-    // absent right after login, present once that resolves. Flattened
-    // (not nested) to match how profile.tsx already reads these.
     memberType?: string | null;
     city?: string | null;
     pincode?: string | null;
