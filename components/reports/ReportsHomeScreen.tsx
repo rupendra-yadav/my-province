@@ -6,86 +6,118 @@
 // by the route when session.isAdmin is true (see onViewFullyPaid etc.
 // below), so this component itself stays role-agnostic.
 //
-// DUMMY UI ONLY: all data below is hardcoded for layout/visual review.
-// No API calls yet — will be wired to GET /reports/dashboard (or similar)
-// once the backend aggregation endpoints are settled. Kept in one clearly
-// marked block below so swapping in real data later is a single-place edit.
+// Wired to GET /reports/summary and GET /reports/collection-summary, both
+// defaulting to the current calendar year — January through the current
+// month — via a MonthRangeSelector.
+//
+// Block / House Type filters are real, but applied LOCALLY: they reuse
+// GET /reports/house-type-analysis (already fetched, grouped both ways)
+// rather than a new backend param. Picking one resets the other, since
+// the breakdown endpoint only groups by one dimension at a time — a true
+// two-dimensional filter (a specific block AND a specific house type at
+// once) would need new backend work. When a filter is active, the
+// Collection Trend chart is hidden rather than shown misleadingly
+// unfiltered — there's no per-block/per-type trend data to filter it
+// with locally.
+//
+// "Fully Paid / Partial / Unpaid" counts come from chargesByStatus (or
+// the matching breakdown row's paid/partial/unpaid), which count CHARGES
+// not houses — closest available proxy until the backend exposes a
+// per-house rollup. partialPaidDue/unpaidDue aren't split out by the
+// backend, so they're estimated by dividing pendingAmount proportionally
+// across the two buckets' charge counts — flagged below, replace once a
+// real split exists.
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Card, FadeSlideIn, formatINR, PrimaryButton } from '../ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Card, FadeSlideIn, formatINR, MonthRangeSelector, MonthRangeValue, PrimaryButton, SelectChip } from '../ui';
 import { useTheme } from '../../context/ThemeContext';
+import { ApiError } from '../../services/api';
+import {
+  CollectionSummary,
+  getReportsCollectionSummary,
+  getReportsHouseTypeAnalysis,
+  getReportsSummary,
+  HouseTypeBreakdown,
+  ReportsSummary,
+  TrendPoint,
+} from '../../services/endpoints';
+import { useReportsCycleRange } from '../../hooks/useReportsCycleRange';
 
-// ---------------------------------------------------------------------------
-// DUMMY DATA — replace with real API response later. Shape is a best guess
-// at what GET /reports/dashboard would return; adjust once backend exists.
-// ---------------------------------------------------------------------------
-const MOCK_REPORT = {
-  societyName: 'Green Valley Residency',
-  periodLabel: '01 Mar 2026 – 31 Mar 2026',
-  blockFilterLabel: 'All Block',
-  houseTypeFilterLabel: 'All House Type',
+type FilterDimension = 'block' | 'houseType';
 
-  totalCollection: 3411403,
-  totalDue: 3970344,
-  pendingAmount: 558941,
-  collectionPct: 85.9,
-  vsLastMonthPct: 12.6,
+interface ReportRow {
+  totalCollection: number;
+  totalDue: number;
+  pendingAmount: number;
+  collectionPct: number;
+  vsLastMonthPct: number | null;
+  totalHouses: number;
+  fullyPaid: number;
+  fullyPaidPct: number;
+  partialPaid: number;
+  partialPaidDue: number;
+  unpaid: number;
+  unpaidDue: number;
+  trend: TrendPoint[] | null; // null when a block/house-type filter is active — can't be locally filtered
+}
 
-  totalHouses: 392,
-  fullyPaid: 341,
-  fullyPaidPct: 87,
-  partialPaid: 18,
-  partialPaidDue: 126000,
-  unpaid: 33,
-  unpaidDue: 432941,
+function buildReportRow(params: {
+  summary: ReportsSummary;
+  collection: CollectionSummary;
+  activeRow: HouseTypeBreakdown | null; // the matching block/houseType breakdown row, if a filter is active
+}): ReportRow {
+  const { summary, collection, activeRow } = params;
 
-  trend: [
-    { label: 'Sep', valueLakh: 2.8 },
-    { label: 'Oct', valueLakh: 3.1 },
-    { label: 'Nov', valueLakh: 3.6 },
-    { label: 'Dec', valueLakh: 4.2 },
-    { label: 'Jan', valueLakh: 4.9 },
-    { label: 'Feb', valueLakh: 4.1 },
-    { label: 'Mar', valueLakh: 4.7 },
-  ],
-};
-// ---------------------------------------------------------------------------
+  if (activeRow) {
+    const due = activeRow.collected + activeRow.pending;
+    const splitBase = activeRow.partial + activeRow.unpaid || 1;
+    return {
+      totalCollection: activeRow.collected,
+      totalDue: due,
+      pendingAmount: activeRow.pending,
+      collectionPct: activeRow.pct,
+      vsLastMonthPct: null,
+      totalHouses: activeRow.totalHouses,
+      fullyPaid: activeRow.paid,
+      fullyPaidPct: activeRow.totalHouses > 0 ? Math.round((activeRow.paid / activeRow.totalHouses) * 100) : 0,
+      partialPaid: activeRow.partial,
+      partialPaidDue: Math.round((activeRow.pending * activeRow.partial) / splitBase),
+      unpaid: activeRow.unpaid,
+      unpaidDue: Math.round((activeRow.pending * activeRow.unpaid) / splitBase),
+      trend: null,
+    };
+  }
 
-function FilterChip({
-  label,
-  value,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  onPress: () => void;
-}) {
-  const { colors, radius, spacing, typography } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: radius.md,
-        paddingVertical: spacing.md - 2,
-        paddingHorizontal: spacing.md,
-        backgroundColor: colors.surface,
-      }}
-    >
-      <View>
-        <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 2 }]}>{label}</Text>
-        <Text style={[typography.bodyMedium, { color: colors.text }]}>{value}</Text>
-      </View>
-      <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-    </Pressable>
-  );
+  const { paid, partial, pending, overdue } = summary.chargesByStatus;
+  const unpaid = pending + overdue;
+  const splitBase = partial + unpaid || 1;
+  const trend = collection.trend;
+
+  return {
+    totalCollection: collection.totalCollection,
+    totalDue: collection.totalDue,
+    pendingAmount: collection.pendingAmount,
+    collectionPct: collection.collectionPct,
+    vsLastMonthPct: null, // computed separately once trend has at least 2 points — see below
+    totalHouses: collection.totalHouses,
+    fullyPaid: paid,
+    fullyPaidPct: collection.totalHouses > 0 ? Math.round((paid / collection.totalHouses) * 100) : 0,
+    partialPaid: partial,
+    partialPaidDue: Math.round((collection.pendingAmount * partial) / splitBase),
+    unpaid,
+    unpaidDue: Math.round((collection.pendingAmount * unpaid) / splitBase),
+    trend,
+  };
+}
+
+function vsLastMonthFromTrend(trend: TrendPoint[] | null): number | null {
+  if (!trend || trend.length < 2) return null;
+  const last = trend[trend.length - 1];
+  const prev = trend[trend.length - 2];
+  if (prev.valueLakh <= 0) return null;
+  return Number((((last.valueLakh - prev.valueLakh) / prev.valueLakh) * 100).toFixed(1));
 }
 
 function ProgressBar({ pct }: { pct: number }) {
@@ -193,7 +225,89 @@ export function ReportsHomeContent({
   onViewUnpaid?: () => void;
 }) {
   const { colors, spacing, radius, typography } = useTheme();
-  const r = MOCK_REPORT;
+  const { range, setRange, isLoadingCycle, cycleError } = useReportsCycleRange();
+
+  const [blockFilter, setBlockFilter] = useState('all');
+  const [houseTypeFilter, setHouseTypeFilter] = useState('all');
+
+  const [summary, setSummary] = useState<ReportsSummary | null>(null);
+  const [collection, setCollection] = useState<CollectionSummary | null>(null);
+  const [blockBreakdown, setBlockBreakdown] = useState<HouseTypeBreakdown[]>([]);
+  const [houseTypeBreakdown, setHouseTypeBreakdown] = useState<HouseTypeBreakdown[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (r: MonthRangeValue) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [summaryRes, collectionRes, blockRes, houseTypeRes] = await Promise.all([
+        getReportsSummary(r),
+        getReportsCollectionSummary(r),
+        getReportsHouseTypeAnalysis({ groupBy: 'block', ...r }),
+        getReportsHouseTypeAnalysis({ groupBy: 'houseType', ...r }),
+      ]);
+      setSummary(summaryRes);
+      setCollection(collectionRes);
+      setBlockBreakdown(blockRes);
+      setHouseTypeBreakdown(houseTypeRes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load report.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (range) load(range);
+  }, [range, load]);
+
+  const selectFilter = (dimension: FilterDimension, key: string) => {
+    if (dimension === 'block') {
+      setBlockFilter(key);
+      setHouseTypeFilter('all');
+    } else {
+      setHouseTypeFilter(key);
+      setBlockFilter('all');
+    }
+  };
+
+  if (isLoadingCycle || (isLoading && !summary)) {
+    return (
+      <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
+        <ActivityIndicator color={colors.textMuted} />
+      </View>
+    );
+  }
+
+  if (cycleError && !range) {
+    return (
+      <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{cycleError}</Text>
+      </View>
+    );
+  }
+
+  if (error && !summary) {
+    return (
+      <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{error}</Text>
+        <Pressable onPress={() => range && load(range)} style={{ marginTop: spacing.md }}>
+          <Text style={[typography.caption, { color: colors.accent }]}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const activeRow =
+    blockFilter !== 'all'
+      ? blockBreakdown.find((b) => b.key === blockFilter) ?? null
+      : houseTypeFilter !== 'all'
+      ? houseTypeBreakdown.find((h) => h.key === houseTypeFilter) ?? null
+      : null;
+
+  const r = buildReportRow({ summary: summary!, collection: collection!, activeRow });
+  const vsLastMonthPct = vsLastMonthFromTrend(r.trend);
 
   return (
     <>
@@ -202,29 +316,27 @@ export function ReportsHomeContent({
         <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.sm }]}>
           Reporting Period
         </Text>
-        <Pressable
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-            backgroundColor: colors.surface,
-            marginBottom: spacing.md,
-          }}
-        >
-          <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
-          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            {r.periodLabel}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
+        <View style={{ marginBottom: spacing.md }}>
+          <MonthRangeSelector value={range!} onChange={setRange} />
+        </View>
 
+        <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: 4 }}>
+          <Text style={[typography.tiny, { color: colors.textMuted, flex: 1 }]}>Block</Text>
+          <Text style={[typography.tiny, { color: colors.textMuted, flex: 1 }]}>House type</Text>
+        </View>
         <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
-          <FilterChip label="Block" value={r.blockFilterLabel} onPress={() => {}} />
-          <FilterChip label="House Type" value={r.houseTypeFilterLabel} onPress={() => {}} />
+          <SelectChip
+            icon="business-outline"
+            value={blockFilter}
+            options={blockBreakdown.map((b) => ({ key: b.key, label: b.label }))}
+            onChange={(key) => selectFilter('block', key)}
+          />
+          <SelectChip
+            icon="home-outline"
+            value={houseTypeFilter}
+            options={houseTypeBreakdown.map((h) => ({ key: h.key, label: h.label }))}
+            onChange={(key) => selectFilter('houseType', key)}
+          />
         </View>
 
         <PrimaryButton label="View Report" icon="bar-chart-outline" onPress={() => onViewReport?.()} />
@@ -236,20 +348,33 @@ export function ReportsHomeContent({
           <Text style={[typography.caption, { color: colors.textMuted }]}>Total Collection</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs }}>
             <Text style={[typography.display, { color: colors.text }]}>{formatINR(r.totalCollection)}</Text>
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: colors.successBg,
-                borderRadius: radius.sm,
-                paddingHorizontal: spacing.sm,
-                paddingVertical: 3,
-                marginLeft: spacing.sm,
-              }}
-            >
-              <Ionicons name="arrow-up" size={11} color={colors.success} />
-              <Text style={[typography.tiny, { color: colors.success, marginLeft: 2 }]}>{r.vsLastMonthPct}%</Text>
-            </View>
+            {vsLastMonthPct !== null && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: vsLastMonthPct >= 0 ? colors.successBg : colors.dangerBg,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: 3,
+                  marginLeft: spacing.sm,
+                }}
+              >
+                <Ionicons
+                  name={vsLastMonthPct >= 0 ? 'arrow-up' : 'arrow-down'}
+                  size={11}
+                  color={vsLastMonthPct >= 0 ? colors.success : colors.danger}
+                />
+                <Text
+                  style={[
+                    typography.tiny,
+                    { color: vsLastMonthPct >= 0 ? colors.success : colors.danger, marginLeft: 2 },
+                  ]}
+                >
+                  {Math.abs(vsLastMonthPct)}%
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
             {r.collectionPct}% of {formatINR(r.totalDue)} collected
@@ -305,21 +430,31 @@ export function ReportsHomeContent({
         </View>
       </FadeSlideIn>
 
-      {/* Collection trend */}
+      {/* Collection trend — hidden when a block/house-type filter is
+          active, since there's no per-block/per-type trend to filter it
+          with locally (see file-level note). */}
       <FadeSlideIn delay={140} style={{ marginTop: spacing.xl }}>
         <Card>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={[typography.h2, { color: colors.text }]}>Collection Trend</Text>
-            <Pressable onPress={() => onViewTrendDetails?.()}>
-              <Text style={[typography.caption, { color: colors.accent }]}>View details</Text>
-            </Pressable>
+            {r.trend && (
+              <Pressable onPress={() => onViewTrendDetails?.()}>
+                <Text style={[typography.caption, { color: colors.accent }]}>View details</Text>
+              </Pressable>
+            )}
           </View>
-          <Text style={[typography.tiny, { color: colors.textMuted, marginTop: 2 }]}>Amount in Lakhs (₹)</Text>
-          <TrendBarChart data={r.trend} />
+          {r.trend ? (
+            <>
+              <Text style={[typography.tiny, { color: colors.textMuted, marginTop: 2 }]}>Amount in Lakhs (₹)</Text>
+              <TrendBarChart data={r.trend} />
+            </>
+          ) : (
+            <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.sm }]}>
+              Not available for a filtered view — clear the Block / House Type filter to see the trend.
+            </Text>
+          )}
         </Card>
       </FadeSlideIn>
     </>
   );
 }
-
-export const REPORTS_SOCIETY_NAME = MOCK_REPORT.societyName;

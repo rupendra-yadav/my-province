@@ -6,23 +6,25 @@
 // outstanding balance (partial + unpaid). Red is used only as an accent
 // (amounts/icons), not as a page-wide treatment.
 //
-// DUMMY UI ONLY: data comes from components/reports/mockResidents.ts.
+// Wired to GET /reports/residents (same source as the Resident Payment
+// List) — filtered to status !== 'paid' here, since there's no separate
+// unpaid-only endpoint. Backend accepts month/year; a MonthSelector
+// drives it here.
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { Card, formatINR } from '../ui';
-import { MOCK_RESIDENTS, ResidentPaymentRecord, UNPAID_SUMMARY } from './mockResidents';
-
-const PERIOD_LABEL = '01 Mar 2026 – 31 Mar 2026';
+import { Card, formatINR, MonthSelector } from '../ui';
+import { ApiError } from '../../services/api';
+import { getReportsResidents, ResidentPaymentRow } from '../../services/endpoints';
 
 function monthsLabel(n?: number) {
   if (!n) return '';
   return n === 1 ? '1 month pending' : `${n} months pending`;
 }
 
-function UnpaidCard({ item, onPress }: { item: ResidentPaymentRecord; onPress: () => void }) {
+function UnpaidCard({ item, onPress }: { item: ResidentPaymentRow; onPress: () => void }) {
   const { colors, radius, spacing, typography } = useTheme();
   return (
     <Pressable
@@ -50,13 +52,47 @@ function UnpaidCard({ item, onPress }: { item: ResidentPaymentRecord; onPress: (
   );
 }
 
-export function UnpaidResidentsContent({ onSelectResident }: { onSelectResident: (id: string) => void }) {
+export function UnpaidResidentsContent({
+  onSelectResident,
+}: {
+  onSelectResident: (unitId: number) => void;
+}) {
   const { colors, spacing, radius, typography } = useTheme();
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
   const [query, setQuery] = useState('');
+  const [residents, setResidents] = useState<ResidentPaymentRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setResidents(await getReportsResidents({ month, year }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load residents.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const unpaidOnly = useMemo(
-    () => MOCK_RESIDENTS.filter((r) => r.status !== 'paid').sort((a, b) => b.balance - a.balance),
-    []
+    () => residents.filter((r) => r.status !== 'paid').sort((a, b) => b.balance - a.balance),
+    [residents]
+  );
+
+  const summary = useMemo(
+    () => ({
+      unpaidHouses: unpaidOnly.length,
+      totalPending: unpaidOnly.reduce((sum, r) => sum + r.balance, 0),
+    }),
+    [unpaidOnly]
   );
 
   const filtered = useMemo(() => {
@@ -68,36 +104,20 @@ export function UnpaidResidentsContent({ onSelectResident }: { onSelectResident:
   return (
     <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: spacing.xl }}>
-        <Pressable
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-            backgroundColor: colors.surface,
-            marginBottom: spacing.md,
-          }}
-        >
-          <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
-          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            {PERIOD_LABEL}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
+        <View style={{ marginBottom: spacing.md }}>
+          <MonthSelector month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y); }} />
+        </View>
 
         <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md }}>
           <Card style={{ flex: 1 }}>
             <Ionicons name="home-outline" size={18} color={colors.text} />
-            <Text style={[typography.h1, { color: colors.text, marginTop: spacing.sm }]}>{UNPAID_SUMMARY.unpaidHouses}</Text>
+            <Text style={[typography.h1, { color: colors.text, marginTop: spacing.sm }]}>{summary.unpaidHouses}</Text>
             <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>Unpaid Houses</Text>
           </Card>
           <Card style={{ flex: 1 }}>
             <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
             <Text style={[typography.h1, { color: colors.danger, marginTop: spacing.sm }]}>
-              {formatINR(UNPAID_SUMMARY.totalPending)}
+              {formatINR(summary.totalPending)}
             </Text>
             <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>Total Pending</Text>
           </Card>
@@ -126,20 +146,33 @@ export function UnpaidResidentsContent({ onSelectResident }: { onSelectResident:
         </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl }}
-        renderItem={({ item }) => <UnpaidCard item={item} onPress={() => onSelectResident(item.id)} />}
-        ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
-            <Ionicons name="checkmark-done-outline" size={26} color={colors.textMuted} />
-            <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
-              No residents match this search
-            </Text>
-          </View>
-        }
-      />
+      {isLoading && residents.length === 0 ? (
+        <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.textMuted} />
+        </View>
+      ) : error && residents.length === 0 ? (
+        <View style={{ paddingTop: spacing.xxl, alignItems: 'center', paddingHorizontal: spacing.xl }}>
+          <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{error}</Text>
+          <Pressable onPress={load} style={{ marginTop: spacing.md }}>
+            <Text style={[typography.caption, { color: colors.accent }]}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl }}
+          renderItem={({ item }) => <UnpaidCard item={item} onPress={() => onSelectResident(item.unitId)} />}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
+              <Ionicons name="checkmark-done-outline" size={26} color={colors.textMuted} />
+              <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
+                No residents match this search
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }

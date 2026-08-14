@@ -5,22 +5,20 @@
 // That route redirects non-admins away; Reports Home also only wires the
 // tiles that link here when session.isAdmin is true.
 //
-// DUMMY UI ONLY: data comes from components/reports/mockResidents.ts.
-// No API calls yet — will be wired to a real resident/payment listing
-// endpoint later; this component only reads the shared mock list.
+// Wired to GET /reports/residents. Backend accepts month/year (defaults
+// to current month server-side); a MonthSelector drives it here.
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { formatINR } from '../ui';
-import { MOCK_RESIDENTS, ResidentPaymentRecord, ResidentPaymentStatus } from './mockResidents';
+import { formatINR, MonthSelector } from '../ui';
+import { ApiError } from '../../services/api';
+import { getReportsResidents, ResidentPaymentRow } from '../../services/endpoints';
 
 export type ResidentListFilter = 'all' | 'paid' | 'partial' | 'unpaid';
 
-const PERIOD_LABEL = '01 Mar 2026 – 31 Mar 2026';
-
-function StatusBadge({ status }: { status: ResidentPaymentStatus }) {
+function StatusBadge({ status }: { status: ResidentPaymentRow['status'] }) {
   const { colors, radius, spacing, typography } = useTheme();
   const map = {
     paid: { bg: colors.successBg, fg: colors.success, label: 'Paid' },
@@ -41,7 +39,7 @@ function StatusBadge({ status }: { status: ResidentPaymentStatus }) {
   );
 }
 
-function ResidentCard({ item, onPress }: { item: ResidentPaymentRecord; onPress: () => void }) {
+function ResidentCard({ item, onPress }: { item: ResidentPaymentRow; onPress: () => void }) {
   const { colors, radius, spacing, typography } = useTheme();
   const paidDateLabel = item.paidDate
     ? new Date(item.paidDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -94,52 +92,58 @@ export function ResidentPaymentListContent({
   onSelectResident,
 }: {
   initialFilter?: ResidentListFilter;
-  onSelectResident: (id: string) => void;
+  onSelectResident: (unitId: number) => void;
 }) {
   const { colors, spacing, radius, typography } = useTheme();
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
   const [filter, setFilter] = useState<ResidentListFilter>(initialFilter);
   const [query, setQuery] = useState('');
+  const [residents, setResidents] = useState<ResidentPaymentRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setResidents(await getReportsResidents({ month, year }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load residents.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [month, year]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const counts = useMemo(
     () => ({
-      all: MOCK_RESIDENTS.length,
-      paid: MOCK_RESIDENTS.filter((r) => r.status === 'paid').length,
-      partial: MOCK_RESIDENTS.filter((r) => r.status === 'partial').length,
-      unpaid: MOCK_RESIDENTS.filter((r) => r.status === 'unpaid').length,
+      all: residents.length,
+      paid: residents.filter((r) => r.status === 'paid').length,
+      partial: residents.filter((r) => r.status === 'partial').length,
+      unpaid: residents.filter((r) => r.status === 'unpaid').length,
     }),
-    []
+    [residents]
   );
 
   const filtered = useMemo(() => {
-    return MOCK_RESIDENTS.filter((r) => (filter === 'all' ? true : r.status === filter)).filter((r) => {
+    return residents.filter((r) => (filter === 'all' ? true : r.status === filter)).filter((r) => {
       const q = query.trim().toLowerCase();
       if (!q) return true;
       return r.name.toLowerCase().includes(q) || r.houseCode.toLowerCase().includes(q);
     });
-  }, [filter, query]);
+  }, [residents, filter, query]);
 
   return (
     <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: spacing.xl }}>
-        <Pressable
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-            backgroundColor: colors.surface,
-            marginBottom: spacing.md,
-          }}
-        >
-          <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
-          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            {PERIOD_LABEL}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
+        <View style={{ marginBottom: spacing.md }}>
+          <MonthSelector month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y); }} />
+        </View>
 
         <View
           style={{
@@ -209,20 +213,33 @@ export function ResidentPaymentListContent({
         </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl }}
-        renderItem={({ item }) => <ResidentCard item={item} onPress={() => onSelectResident(item.id)} />}
-        ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
-            <Ionicons name="search-outline" size={26} color={colors.textMuted} />
-            <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
-              No residents match this search
-            </Text>
-          </View>
-        }
-      />
+      {isLoading && residents.length === 0 ? (
+        <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
+          <ActivityIndicator color={colors.textMuted} />
+        </View>
+      ) : error && residents.length === 0 ? (
+        <View style={{ paddingTop: spacing.xxl, alignItems: 'center', paddingHorizontal: spacing.xl }}>
+          <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{error}</Text>
+          <Pressable onPress={load} style={{ marginTop: spacing.md }}>
+            <Text style={[typography.caption, { color: colors.accent }]}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl }}
+          renderItem={({ item }) => <ResidentCard item={item} onPress={() => onSelectResident(item.unitId)} />}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
+              <Ionicons name="search-outline" size={26} color={colors.textMuted} />
+              <Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.md }]}>
+                No residents match this search
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }

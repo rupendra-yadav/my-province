@@ -99,8 +99,6 @@ export const approveRequest = (id: string) => api.patch<{ id: string; approvedSt
 export const rejectRequest = (id: string, reason: string) =>
   api.patch<{ id: string; approvedStatus: string }>(`/requests/${id}/reject`, { reason });
 
-// ---- Payments ---------------------------------------------------------
-
 export interface PaymentPeriodDto {
   id: string;
   type: 'maintenance' | 'membership';
@@ -113,11 +111,26 @@ export interface PaymentPeriodDto {
   status: 'paid' | 'pending' | 'not_paid';
   paidDate?: string;
 }
-
+ 
 export const listPayments = () =>
   api.get<{ maintenance: PaymentPeriodDto[]; membership: PaymentPeriodDto[] }>('/payments');
-
-export const payPeriod = (id: string) => api.post<never>(`/payments/${id}/pay`);
+ 
+export interface InitiatePaymentResult {
+  txnid: string;
+  accessKey: string;
+  payUrl: string;
+}
+ 
+// POST /payments/:id/pay — starts an Easebuzz transaction, does not wait
+// for it to complete.
+export const initiatePayment = (id: string) =>
+  api.post<InitiatePaymentResult>(`/payments/${id}/pay`);
+ 
+// GET /payments/:id/status — used right after the checkout WebView closes,
+// in case the webhook hasn't landed yet.
+export const getPaymentStatus = (id: string) =>
+  api.get<PaymentPeriodDto>(`/payments/${id}/status`);
+ 
 
 // ---- Session validation -----------------------------------------------
 
@@ -162,3 +175,130 @@ export interface MeResult {
 export const getMe = () => api.get<MeResult>('/auth/me');
 
 export const logout = () => api.post<never>('/auth/logout');
+
+// ---- Reports ------------------------------------------------------------
+// Maps to reports.controller.ts: getSummaryStats, getCollectionSummary,
+// getHouseTypeAnalysis, getResidentPaymentList. societyId is resolved
+// server-side from the auth token, so no societyId param is sent here.
+
+// Shared range shape for Screens 1, 2, 3, 7. Omitting all four fields on
+// a request defaults server-side to the current calendar year: January
+// through the current month.
+export interface MonthRange {
+  fromMonth: number;
+  fromYear: number;
+  toMonth: number;
+  toYear: number;
+}
+
+export interface ReportsSummary {
+  totalDue: number;
+  totalCollected: number;
+  totalPending: number;
+  collectionRate: number;
+  totalResidents: number;
+  chargesByStatus: { paid: number; pending: number; partial: number; overdue: number };
+}
+
+export const getReportsSummary = (params?: Partial<MonthRange>) =>
+  api.get<ReportsSummary>('/reports/summary', params);
+
+export interface TrendPoint {
+  label: string;
+  valueLakh: number;
+}
+
+export interface HouseTypeBreakdown {
+  key: string;
+  label: string;
+  pct: number;
+  collected: number;
+  pending: number;
+  totalHouses: number;
+  paid: number;
+  partial: number;
+  unpaid: number;
+}
+
+export interface CollectionSummary {
+  totalCollection: number;
+  totalDue: number;
+  pendingAmount: number;
+  collectionPct: number;
+  totalHouses: number;
+  collectionRate: number;
+  avgCollectionPerHouse: number;
+  trend: TrendPoint[];
+  houseTypePerformance: HouseTypeBreakdown[];
+}
+
+export const getReportsCollectionSummary = (params?: Partial<MonthRange>) =>
+  api.get<CollectionSummary>('/reports/collection-summary', params);
+
+export const getReportsHouseTypeAnalysis = (params: { groupBy: 'houseType' | 'block' } & Partial<MonthRange>) =>
+  api.get<HouseTypeBreakdown[]>('/reports/house-type-analysis', params);
+
+export interface ResidentPaymentRow {
+  id: string;
+  unitId: number;
+  houseCode: string;
+  block: string;
+  unit: string;
+  houseType: string;
+  name: string;
+  status: 'paid' | 'partial' | 'unpaid';
+  monthlyDue: number;
+  paidThisPeriod: number;
+  balance: number;
+  paidDate?: string;
+  monthsPending?: number;
+}
+
+export const getReportsResidents = (params?: { month?: number; year?: number }) =>
+  api.get<ResidentPaymentRow[]>('/reports/residents', params);
+
+// ---- Screen 5: single resident (admin-only) ------------------------------
+// Keyed by unitId (stable across months) rather than a charge id, since a
+// charge is one period's record — see reports.service.ts notes.
+
+export interface ResidentDetail {
+  unitId: number;
+  houseCode: string;
+  block: string;
+  unit: string;
+  houseType: string;
+  name: string;
+}
+
+export const getResidentDetail = (unitId: number) =>
+  api.get<ResidentDetail>(`/reports/residents/${unitId}`);
+
+export interface ResidentHistoryEntry {
+  id: string;
+  period: string;
+  label: string;
+  due: number;
+  paid: number;
+  fine: number;
+  balance: number;
+  status: 'paid' | 'partial' | 'unpaid';
+  paidDate?: string;
+}
+
+export const getResidentHistory = (unitId: number, monthsBack?: number) =>
+  api.get<ResidentHistoryEntry[]>(`/reports/residents/${unitId}/history`, { monthsBack });
+
+// ---- Screen 7: collection trend (shared) ---------------------------------
+
+export interface CollectionTrendPoint {
+  label: string;
+  month: number;
+  year: number;
+  collected: number;
+  pending: number;
+  collectedLakh: number;
+  pendingLakh: number;
+}
+
+export const getReportsCollectionTrend = (params?: Partial<MonthRange>) =>
+  api.get<CollectionTrendPoint[]>('/reports/collection-trend', params);

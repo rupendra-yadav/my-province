@@ -7,15 +7,48 @@
 // would use) so the history rows match the rest of the app rather than
 // introducing a new list style.
 //
-// DUMMY UI ONLY: data comes from components/reports/mockResidents.ts.
+// Wired to GET /reports/residents/:unitId (static info) and
+// GET /reports/residents/:unitId/history (real trailing-12-month history,
+// most recent first). Keyed by unitId — not a charge id — since a charge
+// is one period's record and can't look up other months for the same
+// house. The header's status/due/paid/balance come from history[0] (the
+// most recent period); there's no separate "current period" call.
 
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, FadeSlideIn, formatINR, GhostButton, IconBadge, TransactionHistoryCard } from '../ui';
-import { getResidentById, ResidentPaymentStatus } from './mockResidents';
+import { ApiError } from '../../services/api';
+import {
+  getResidentDetail,
+  getResidentHistory,
+  ResidentDetail,
+  ResidentHistoryEntry,
+} from '../../services/endpoints';
+import type { PaymentPeriod, PaymentStatus } from '../../context/PaymentsContext';
 
-function StatusBadge({ status }: { status: ResidentPaymentStatus }) {
+const STATUS_MAP: Record<ResidentHistoryEntry['status'], PaymentStatus> = {
+  paid: 'paid',
+  partial: 'pending',
+  unpaid: 'not_paid',
+};
+
+function toPaymentPeriod(h: ResidentHistoryEntry): PaymentPeriod {
+  return {
+    id: h.id,
+    type: 'maintenance',
+    period: h.period,
+    label: h.label,
+    due: h.due,
+    paid: h.paid,
+    fine: h.fine,
+    balance: h.balance,
+    status: STATUS_MAP[h.status],
+    paidDate: h.paidDate,
+  };
+}
+
+function StatusBadge({ status }: { status: ResidentHistoryEntry['status'] }) {
   const { colors, radius, spacing, typography } = useTheme();
   const map = {
     paid: { bg: colors.successBg, fg: colors.success, label: 'Paid' },
@@ -39,11 +72,61 @@ function SummaryTile({ label, value, valueColor }: { label: string; value: strin
   );
 }
 
-export function PaymentDetailsContent({ id, onDownloadStatement }: { id: string; onDownloadStatement?: () => void }) {
+export function PaymentDetailsContent({
+  unitId,
+  onDownloadStatement,
+}: {
+  unitId: number;
+  onDownloadStatement?: () => void;
+}) {
   const { colors, spacing, typography } = useTheme();
-  const resident = getResidentById(id);
+  const [detail, setDetail] = useState<ResidentDetail | null>(null);
+  const [history, setHistory] = useState<ResidentHistoryEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!resident) {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [detailResult, historyResult] = await Promise.all([
+          getResidentDetail(unitId),
+          getResidentHistory(unitId),
+        ]);
+        if (!cancelled) {
+          setDetail(detailResult);
+          setHistory(historyResult);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : 'Could not load resident.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [unitId]);
+
+  if (isLoading) {
+    return (
+      <View style={{ alignItems: 'center', paddingTop: spacing.xxxl }}>
+        <ActivityIndicator color={colors.textMuted} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={{ alignItems: 'center', paddingTop: spacing.xxxl }}>
+        <Text style={[typography.body, { color: colors.danger }]}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (!detail) {
     return (
       <View style={{ alignItems: 'center', paddingTop: spacing.xxxl }}>
         <Text style={[typography.body, { color: colors.textMuted }]}>Resident not found.</Text>
@@ -51,39 +134,45 @@ export function PaymentDetailsContent({ id, onDownloadStatement }: { id: string;
     );
   }
 
+  const latest = history[0] ?? null;
+
   return (
     <>
       <FadeSlideIn>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg }}>
           <IconBadge name="home-outline" size={52} />
           <View style={{ marginLeft: spacing.md, flex: 1 }}>
-            <Text style={[typography.tiny, { color: colors.textMuted, letterSpacing: 0.4 }]}>{resident.houseCode}</Text>
-            <Text style={[typography.h1, { color: colors.text, marginTop: 2 }]}>{resident.name}</Text>
+            <Text style={[typography.tiny, { color: colors.textMuted, letterSpacing: 0.4 }]}>{detail.houseCode}</Text>
+            <Text style={[typography.h1, { color: colors.text, marginTop: 2 }]}>{detail.name}</Text>
             <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>
-              Block {resident.block} • House {resident.unit}
+              Block {detail.block} • House {detail.unit}
             </Text>
           </View>
-          <StatusBadge status={resident.status} />
+          {latest && <StatusBadge status={latest.status} />}
         </View>
       </FadeSlideIn>
 
-      <FadeSlideIn delay={40} style={{ marginBottom: spacing.xl }}>
-        <Card style={{ flexDirection: 'row' }}>
-          <SummaryTile label="Monthly Due" value={formatINR(resident.monthlyDue)} />
-          <SummaryTile label="Paid" value={formatINR(resident.paidThisPeriod)} />
-          <SummaryTile
-            label="Balance"
-            value={formatINR(resident.balance)}
-            valueColor={resident.balance > 0 ? colors.danger : colors.success}
-          />
-        </Card>
-      </FadeSlideIn>
+      {latest && (
+        <FadeSlideIn delay={40} style={{ marginBottom: spacing.xl }}>
+          <Card style={{ flexDirection: 'row' }}>
+            <SummaryTile label="Monthly Due" value={formatINR(latest.due)} />
+            <SummaryTile label="Paid" value={formatINR(latest.paid)} />
+            <SummaryTile
+              label="Balance"
+              value={formatINR(latest.balance)}
+              valueColor={latest.balance > 0 ? colors.danger : colors.success}
+            />
+          </Card>
+        </FadeSlideIn>
+      )}
 
       <FadeSlideIn delay={80}>
         <Text style={[typography.h2, { color: colors.text, marginBottom: spacing.sm }]}>Payment History</Text>
-        {resident.history.map((item) => (
-          <TransactionHistoryCard key={item.id} item={item} />
-        ))}
+        {history.length === 0 ? (
+          <Text style={[typography.body, { color: colors.textMuted }]}>No charges recorded yet.</Text>
+        ) : (
+          history.map((item) => <TransactionHistoryCard key={item.id} item={toPaymentPeriod(item)} />)
+        )}
       </FadeSlideIn>
 
       <FadeSlideIn delay={120} style={{ marginTop: spacing.md }}>

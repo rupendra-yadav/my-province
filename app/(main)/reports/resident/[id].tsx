@@ -42,7 +42,7 @@ export default function PaymentDetailsScreen() {
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl }}>
         <PaymentDetailsContent
-          id={id}
+          unitId={Number(id)}
           onDownloadStatement={() => {
             // TODO: wire once statement/PDF generation exists on the backend.
           }}

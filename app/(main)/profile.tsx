@@ -69,18 +69,6 @@ export default function ProfileScreen() {
           </View>
         </FadeSlideIn>
 
-          {isAdmin && (
-          <FadeSlideIn delay={160} style={{ marginTop: spacing.lg }}>
-            <Pressable onPress={() => router.push('/(admin)/requests' as any)}>
-              <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="shield-checkmark-outline" size={19} color={colors.accent} style={{ marginRight: spacing.md }} />
-                <Text style={[typography.bodyMedium, { color: colors.text, flex: 1 }]}>Admin console</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </Card>
-            </Pressable>
-          </FadeSlideIn>
-        )}
-
         <SectionLabel>Contact</SectionLabel>
         <FadeSlideIn delay={40}>
           <Card>
@@ -109,7 +97,17 @@ export default function ProfileScreen() {
           </Card>
         </FadeSlideIn>
 
-      
+        {isAdmin && (
+          <FadeSlideIn delay={160} style={{ marginTop: spacing.lg }}>
+            <Pressable onPress={() => router.push('/(admin)/requests' as any)}>
+              <Card style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="shield-checkmark-outline" size={19} color={colors.accent} style={{ marginRight: spacing.md }} />
+                <Text style={[typography.bodyMedium, { color: colors.text, flex: 1 }]}>Admin console</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Card>
+            </Pressable>
+          </FadeSlideIn>
+        )}
 
         <FadeSlideIn delay={200} style={{ marginTop: spacing.lg }}>
           <GhostButton

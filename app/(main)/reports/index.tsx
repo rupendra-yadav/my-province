@@ -11,7 +11,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { REPORTS_SOCIETY_NAME, ReportsHomeContent } from '../../../components/reports/ReportsHomeScreen';
+import { ReportsHomeContent } from '../../../components/reports/ReportsHomeScreen';
 import { FadeSlideIn } from '../../../components/ui';
 import { useAuth } from '../../../context/AuthContext';
 import { useTheme } from '../../../context/ThemeContext';
@@ -33,7 +33,7 @@ export default function ReportsTabScreen() {
         <FadeSlideIn style={{ marginBottom: spacing.lg }}>
           <Text style={[typography.h1, { color: colors.text }]}>Reports</Text>
           <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>
-            {REPORTS_SOCIETY_NAME}
+            {session?.user?.society ?? ''}
           </Text>
         </FadeSlideIn>
 

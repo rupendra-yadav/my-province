@@ -3,49 +3,17 @@
 // only, no individual resident/payment data. Rendered by the single
 // Reports route tree: app/(main)/reports/collection-summary.tsx.
 //
-// DUMMY UI ONLY: all data below is hardcoded for layout/visual review.
-// No API calls yet — will be wired to a real reports endpoint once the
-// backend aggregation strategy is settled. Kept in one clearly marked
-// block below so swapping in real data later is a single-place edit.
+// Wired to GET /reports/collection-summary. Defaults to the current
+// calendar year: January - current month, via a MonthRangeSelector;
+// adjustable to any custom range.
 
-import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Card, FadeSlideIn, formatINR } from '../ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Card, FadeSlideIn, formatINR, MonthRangeSelector, MonthRangeValue } from '../ui';
 import { useTheme } from '../../context/ThemeContext';
-
-// ---------------------------------------------------------------------------
-// DUMMY DATA — replace with real API response later.
-// ---------------------------------------------------------------------------
-const MOCK_SUMMARY = {
-  periodLabel: '01 Mar 2026 – 31 Mar 2026',
-
-  totalCollection: 3411403,
-  totalDue: 3970344,
-  pendingAmount: 558941,
-  collectionPct: 85.9,
-
-  totalHouses: 392,
-  collectionRate: 85.9,
-  avgCollectionPerHouse: 8715,
-
-  trend: [
-    { label: 'Sep', valueLakh: 2.8 },
-    { label: 'Oct', valueLakh: 3.1 },
-    { label: 'Nov', valueLakh: 3.6 },
-    { label: 'Dec', valueLakh: 4.2 },
-    { label: 'Jan', valueLakh: 4.9 },
-    { label: 'Feb', valueLakh: 4.1 },
-    { label: 'Mar', valueLakh: 4.7 },
-  ],
-
-  houseTypePerformance: [
-    { key: 'CC', label: 'CC Houses', pct: 95, collected: 1180430, pending: 62500 },
-    { key: 'DD', label: 'DD Houses', pct: 88, collected: 840210, pending: 114300 },
-    { key: 'PP', label: 'PP Houses', pct: 82, collected: 672330, pending: 146670 },
-  ],
-};
-// ---------------------------------------------------------------------------
+import { ApiError } from '../../services/api';
+import { CollectionSummary, getReportsCollectionSummary } from '../../services/endpoints';
+import { useReportsCycleRange } from '../../hooks/useReportsCycleRange';
 
 function StatTile({ label, value }: { label: string; value: string }) {
   const { colors, spacing, typography } = useTheme();
@@ -127,7 +95,7 @@ function HouseTypeRow({
   item,
   onPress,
 }: {
-  item: (typeof MOCK_SUMMARY.houseTypePerformance)[number];
+  item: { key: string; label: string; pct: number; collected: number; pending: number };
   onPress?: () => void;
 }) {
   const { colors, spacing, typography } = useTheme();
@@ -155,31 +123,61 @@ export function CollectionSummaryContent({
 }: {
   onViewHouseTypeAnalysis?: () => void;
 }) {
-  const { colors, spacing, radius, typography } = useTheme();
-  const s = MOCK_SUMMARY;
+  const { colors, spacing, typography } = useTheme();
+  const { range, setRange, isLoadingCycle, cycleError } = useReportsCycleRange();
+  const [s, setS] = useState<CollectionSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (r: MonthRangeValue) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      setS(await getReportsCollectionSummary(r));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load summary.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (range) load(range);
+  }, [range, load]);
+
+  if (isLoadingCycle || (isLoading && !s)) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <ActivityIndicator color={colors.textMuted} />
+      </View>
+    );
+  }
+
+  if (cycleError && !range) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{cycleError}</Text>
+      </View>
+    );
+  }
+
+  if (error && !s) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{error}</Text>
+        <Pressable onPress={() => range && load(range)} style={{ marginTop: spacing.md }}>
+          <Text style={[typography.caption, { color: colors.accent }]}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const data = s!;
 
   return (
     <>
-      <FadeSlideIn>
-        <Pressable
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-            backgroundColor: colors.surface,
-            marginBottom: spacing.lg,
-          }}
-        >
-          <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
-          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            {s.periodLabel}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
+      <FadeSlideIn style={{ marginBottom: spacing.lg }}>
+        <MonthRangeSelector value={range!} onChange={setRange} />
       </FadeSlideIn>
 
       {/* Hero */}
@@ -187,16 +185,16 @@ export function CollectionSummaryContent({
         <Card>
           <Text style={[typography.caption, { color: colors.textMuted }]}>Total Collection</Text>
           <Text style={[typography.display, { color: colors.text, marginTop: spacing.xs }]}>
-            {formatINR(s.totalCollection)}
+            {formatINR(data.totalCollection)}
           </Text>
           <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>
-            {s.collectionPct}% collected
+            {data.collectionPct}% collected
           </Text>
           <View style={{ marginTop: spacing.md }}>
-            <ProgressBar pct={s.collectionPct} color={colors.success} />
+            <ProgressBar pct={data.collectionPct} color={colors.success} />
           </View>
           <Text style={[typography.caption, { color: colors.danger, marginTop: spacing.md }]}>
-            {formatINR(s.pendingAmount)} pending
+            {formatINR(data.pendingAmount)} pending
           </Text>
         </Card>
       </FadeSlideIn>
@@ -206,16 +204,16 @@ export function CollectionSummaryContent({
         <StatGrid
           rows={[
             [
-              { label: 'Total Houses', value: String(s.totalHouses) },
-              { label: 'Total Due', value: formatINR(s.totalDue) },
+              { label: 'Total Houses', value: String(data.totalHouses) },
+              { label: 'Total Due', value: formatINR(data.totalDue) },
             ],
             [
-              { label: 'Collected', value: formatINR(s.totalCollection) },
-              { label: 'Pending', value: formatINR(s.pendingAmount) },
+              { label: 'Collected', value: formatINR(data.totalCollection) },
+              { label: 'Pending', value: formatINR(data.pendingAmount) },
             ],
             [
-              { label: 'Collection Rate', value: `${s.collectionRate}%` },
-              { label: 'Avg / House', value: formatINR(s.avgCollectionPerHouse) },
+              { label: 'Collection Rate', value: `${data.collectionRate}%` },
+              { label: 'Avg / House', value: formatINR(data.avgCollectionPerHouse) },
             ],
           ]}
         />
@@ -226,7 +224,7 @@ export function CollectionSummaryContent({
         <Card>
           <Text style={[typography.h2, { color: colors.text }]}>Collection Trend</Text>
           <Text style={[typography.tiny, { color: colors.textMuted, marginTop: 2 }]}>Amount in Lakhs (₹)</Text>
-          <TrendBarChart data={s.trend} />
+          <TrendBarChart data={data.trend} />
         </Card>
       </FadeSlideIn>
 
@@ -246,7 +244,7 @@ export function CollectionSummaryContent({
           </Pressable>
         </View>
         <Card style={{ padding: 0 }}>
-          {s.houseTypePerformance.map((item, i) => (
+          {data.houseTypePerformance.map((item, i) => (
             <View
               key={item.key}
               style={{

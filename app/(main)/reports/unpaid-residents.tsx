@@ -39,7 +39,9 @@ export default function UnpaidResidentsScreen() {
         <Text style={[typography.h2, { color: colors.text, marginLeft: spacing.md }]}>Unpaid Residents</Text>
       </View>
 
-      <UnpaidResidentsContent onSelectResident={(id) => router.push(`/(main)/reports/resident/${id}` as any)} />
+      <UnpaidResidentsContent
+        onSelectResident={(unitId) => router.push(`/(main)/reports/resident/${unitId}` as any)}
+      />
     </View>
   );
 }

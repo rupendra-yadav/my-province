@@ -3,104 +3,160 @@
 // only, no individual resident/payment data. Rendered by the single
 // Reports route tree: app/(main)/reports/collection-trend.tsx.
 //
-// DUMMY UI ONLY: all data below is hardcoded for layout/visual review.
-// No API calls yet. Kept in one clearly marked block below so swapping in
-// real data later is a single-place edit.
+// Wired to GET /reports/collection-trend (collected AND pending per
+// month). Defaults to the current calendar year: January - current
+// month, via a MonthRangeSelector; adjustable to any custom
+// range. Quick Insights are computed client-side from the real trend
+// below — a "highest month" and a monotonic-growth streak — rather than
+// hardcoded, since nothing upstream computes them.
 
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { Card, FadeSlideIn, formatINR, SegmentedTabs } from '../ui';
-
-// ---------------------------------------------------------------------------
-// DUMMY DATA — replace with real API response later.
-// ---------------------------------------------------------------------------
-const PERIOD_LABEL = '01 Mar 2026 – 31 Mar 2026';
-
-const MONTHS = [
-  { label: 'Sep', collectedLakh: 2.8, collected: 280000, pending: 40000 },
-  { label: 'Oct', collectedLakh: 3.1, collected: 310000, pending: 55000 },
-  { label: 'Nov', collectedLakh: 3.6, collected: 360000, pending: 48000 },
-  { label: 'Dec', collectedLakh: 4.2, collected: 420000, pending: 62000 },
-  { label: 'Jan', collectedLakh: 4.9, collected: 490000, pending: 39000 },
-  { label: 'Feb', collectedLakh: 4.1, collected: 410000, pending: 70000 },
-  { label: 'Mar', collectedLakh: 4.7, collected: 470000, pending: 80000 },
-];
-
-const INSIGHTS = ['Highest collection in Jan 2026 (₹4.9L)', 'Consistent growth in last 4 months'];
-// ---------------------------------------------------------------------------
+import { Card, FadeSlideIn, formatINR, MonthRangeSelector, MonthRangeValue, SegmentedTabs } from '../ui';
+import { ApiError } from '../../services/api';
+import { CollectionTrendPoint, getReportsCollectionTrend } from '../../services/endpoints';
+import { useReportsCycleRange } from '../../hooks/useReportsCycleRange';
 
 type Mode = 'collection' | 'pending';
 
-function TrendChart({ mode, selected, onSelect }: { mode: Mode; selected: number; onSelect: (i: number) => void }) {
+function buildInsights(months: CollectionTrendPoint[]): string[] {
+  if (months.length === 0) return [];
+  const insights: string[] = [];
+
+  const highest = months.reduce((a, b) => (b.collected > a.collected ? b : a));
+  insights.push(`Highest collection in ${highest.label} ${highest.year} (${formatINR(highest.collected)})`);
+
+  let streak = 1;
+  for (let i = months.length - 1; i > 0; i--) {
+    if (months[i].collected > months[i - 1].collected) streak++;
+    else break;
+  }
+  if (streak >= 3) {
+    insights.push(`Collection has risen for ${streak} months in a row`);
+  }
+
+  return insights;
+}
+
+function TrendChart({
+  mode,
+  months,
+  selected,
+  onSelect,
+}: {
+  mode: Mode;
+  months: CollectionTrendPoint[];
+  selected: number;
+  onSelect: (i: number) => void;
+}) {
   const { colors, spacing, typography, radius } = useTheme();
-  const values = MONTHS.map((m) => (mode === 'collection' ? m.collected : m.pending));
-  const max = Math.max(...values);
+  const values = months.map((m) => (mode === 'collection' ? m.collected : m.pending));
+  const max = Math.max(1, ...values);
   const chartHeight = 96;
+  const barSlotWidth = 40; // fixed slot width so long ranges scroll instead of squishing
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight, marginTop: spacing.md }}>
-      {MONTHS.map((m, i) => {
-        const value = mode === 'collection' ? m.collected : m.pending;
-        const isActive = i === selected;
-        const barHeight = Math.max(6, (value / max) * chartHeight);
-        return (
-          <Pressable key={m.label} onPress={() => onSelect(i)} style={{ flex: 1, alignItems: 'center' }}>
-            <View
-              style={{
-                width: '50%',
-                height: barHeight,
-                borderRadius: radius.sm,
-                backgroundColor: isActive ? colors.accent : colors.primaryMuted,
-              }}
-            />
-            <Text
-              style={[
-                typography.tiny,
-                { color: isActive ? colors.text : colors.textMuted, marginTop: spacing.xs, fontWeight: isActive ? ('600' as const) : ('500' as const) },
-              ]}
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: chartHeight }}>
+        {months.map((m, i) => {
+          const value = mode === 'collection' ? m.collected : m.pending;
+          const isActive = i === selected;
+          const barHeight = Math.max(6, (value / max) * chartHeight);
+          return (
+            <Pressable
+              key={`${m.year}-${m.month}`}
+              onPress={() => onSelect(i)}
+              style={{ width: barSlotWidth, alignItems: 'center' }}
             >
-              {m.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+              <View
+                style={{
+                  width: '50%',
+                  height: barHeight,
+                  borderRadius: radius.sm,
+                  backgroundColor: isActive ? colors.accent : colors.primaryMuted,
+                }}
+              />
+              <Text
+                style={[
+                  typography.tiny,
+                  { color: isActive ? colors.text : colors.textMuted, marginTop: spacing.xs, fontWeight: isActive ? ('600' as const) : ('500' as const) },
+                ]}
+              >
+                {m.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </ScrollView>
   );
 }
 
 export function CollectionTrendContent() {
   const { colors, spacing, radius, typography } = useTheme();
+  const { range, setRange, isLoadingCycle, cycleError } = useReportsCycleRange();
   const [mode, setMode] = useState<Mode>('collection');
-  const [selected, setSelected] = useState(MONTHS.length - 1);
+  const [months, setMonths] = useState<CollectionTrendPoint[]>([]);
+  const [selected, setSelected] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const current = MONTHS[selected];
-  const prev = MONTHS[selected - 1];
-  const vsPrevPct = prev ? Math.round(((current.collected - prev.collected) / prev.collected) * 1000) / 10 : null;
+  const load = useCallback(async (r: MonthRangeValue) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await getReportsCollectionTrend(r);
+      setMonths(result);
+      setSelected(result.length - 1);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load trend.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (range) load(range);
+  }, [range, load]);
+
+  if (isLoadingCycle || (isLoading && months.length === 0)) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <ActivityIndicator color={colors.textMuted} />
+      </View>
+    );
+  }
+
+  if (cycleError && !range) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{cycleError}</Text>
+      </View>
+    );
+  }
+
+  if (error && months.length === 0) {
+    return (
+      <View style={{ paddingVertical: 80, alignItems: 'center' }}>
+        <Text style={[typography.body, { color: colors.danger, textAlign: 'center' }]}>{error}</Text>
+        <Pressable onPress={() => range && load(range)} style={{ marginTop: spacing.md }}>
+          <Text style={[typography.caption, { color: colors.accent }]}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const current = months[selected];
+  const prev = months[selected - 1];
+  const vsPrevPct = prev && prev.collected > 0 ? Math.round(((current.collected - prev.collected) / prev.collected) * 1000) / 10 : null;
+  const insights = buildInsights(months);
 
   return (
     <>
-      <FadeSlideIn>
-        <Pressable
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-            backgroundColor: colors.surface,
-            marginBottom: spacing.lg,
-          }}
-        >
-          <Ionicons name="calendar-outline" size={17} color={colors.textMuted} />
-          <Text style={[typography.body, { color: colors.text, marginLeft: spacing.sm, flex: 1 }]}>
-            {PERIOD_LABEL}
-          </Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
+      <FadeSlideIn style={{ marginBottom: spacing.md }}>
+        <MonthRangeSelector value={range!} onChange={setRange} />
       </FadeSlideIn>
 
       <FadeSlideIn delay={40} style={{ marginBottom: spacing.sm }}>
@@ -117,13 +173,13 @@ export function CollectionTrendContent() {
       <FadeSlideIn delay={80}>
         <Card>
           <Text style={[typography.tiny, { color: colors.textMuted }]}>Amount in Lakhs (₹)</Text>
-          <TrendChart mode={mode} selected={selected} onSelect={setSelected} />
+          <TrendChart mode={mode} months={months} selected={selected} onSelect={setSelected} />
         </Card>
       </FadeSlideIn>
 
       <FadeSlideIn delay={120} style={{ marginTop: spacing.lg }}>
         <Card>
-          <Text style={[typography.h2, { color: colors.text }]}>{current.label} 2026</Text>
+          <Text style={[typography.h2, { color: colors.text }]}>{current.label} {current.year}</Text>
           <View style={{ flexDirection: 'row', marginTop: spacing.md }}>
             <View style={{ flex: 1 }}>
               <Text style={[typography.tiny, { color: colors.textMuted, marginBottom: 4 }]}>Collected</Text>
@@ -160,26 +216,28 @@ export function CollectionTrendContent() {
         </Card>
       </FadeSlideIn>
 
-      <FadeSlideIn delay={160} style={{ marginTop: spacing.lg }}>
-        <Text style={[typography.h2, { color: colors.text, marginBottom: spacing.sm }]}>Quick Insights</Text>
-        <Card>
-          {INSIGHTS.map((line, i) => (
-            <View
-              key={line}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'flex-start',
-                paddingVertical: spacing.sm,
-                borderTopWidth: i === 0 ? 0 : 1,
-                borderTopColor: colors.border,
-              }}
-            >
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 7, marginRight: spacing.sm }} />
-              <Text style={[typography.body, { color: colors.text, flex: 1 }]}>{line}</Text>
-            </View>
-          ))}
-        </Card>
-      </FadeSlideIn>
+      {insights.length > 0 && (
+        <FadeSlideIn delay={160} style={{ marginTop: spacing.lg }}>
+          <Text style={[typography.h2, { color: colors.text, marginBottom: spacing.sm }]}>Quick Insights</Text>
+          <Card>
+            {insights.map((line, i) => (
+              <View
+                key={line}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  paddingVertical: spacing.sm,
+                  borderTopWidth: i === 0 ? 0 : 1,
+                  borderTopColor: colors.border,
+                }}
+              >
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 7, marginRight: spacing.sm }} />
+                <Text style={[typography.body, { color: colors.text, flex: 1 }]}>{line}</Text>
+              </View>
+            ))}
+          </Card>
+        </FadeSlideIn>
+      )}
     </>
   );
 }

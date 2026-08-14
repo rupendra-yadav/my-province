@@ -1,13 +1,25 @@
 // context/PaymentsContext.tsx
-// Same seam pattern as RequestsContext: screens (dashboard, payment) only
-// ever call refresh()/pay() and read the derived shapes below. Wired to
-// GET /payments and POST /payments/:id/pay — the latter currently always
-// rejects with PAYMENT_NOT_IMPLEMENTED until the gateway is integrated,
-// which pay() surfaces as a normal ApiError for the screen to display.
+// Same seam pattern as RequestsContext: screens only ever call
+// refresh()/pay()/confirmPayment() and read the derived shapes below.
+//
+// pay() now starts an Easebuzz transaction (POST /payments/:id/pay) and
+// returns { payUrl } for the screen to open in a WebView — it does NOT
+// wait for the payment to finish, since that now happens asynchronously
+// via a webhook while the resident is looking at Easebuzz's checkout page.
+//
+// confirmPayment() is called by the screen once the WebView closes. The
+// webhook is the actual source of truth and can land a moment after the
+// WebView redirect fires, so this polls GET /payments/:id/status a few
+// times before giving the local state one final refresh either way.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../services/api';
-import { listPayments, payPeriod } from '../services/endpoints';
+import { getPaymentStatus, initiatePayment, InitiatePaymentResult, listPayments } from '../services/endpoints';
+// Note: getPaymentStatus() returns PaymentPeriodDto from services/endpoints.ts,
+// not the PaymentPeriod defined below — the two are structurally identical
+// (same fields/types) so no explicit cast is needed, but they're kept as
+// separate named types to avoid a circular import (endpoints.ts must not
+// import from this file, since this file already imports from endpoints.ts).
 import { useAuth } from './AuthContext';
 
 export type FeeType = 'maintenance' | 'membership';
@@ -43,7 +55,10 @@ type PaymentsContextValue = {
   error: string | null;
   refresh: () => void;
   getById: (id: string) => PaymentPeriod | undefined;
-  pay: (id: string) => Promise<void>;
+  /** Starts a gateway transaction for this charge. Does not wait for it to complete. */
+  pay: (id: string) => Promise<InitiatePaymentResult>;
+  /** Call after the checkout WebView closes with a success/failure result. */
+  confirmPayment: (id: string) => Promise<void>;
 };
 
 const PaymentsContext = createContext<PaymentsContextValue | undefined>(undefined);
@@ -58,6 +73,9 @@ function summarize(periods: PaymentPeriod[]): PaymentSummary {
     { totalDue: 0, totalPaid: 0, balance: 0 }
   );
 }
+
+const CONFIRM_POLL_ATTEMPTS = 4;
+const CONFIRM_POLL_DELAY_MS = 1500;
 
 export function PaymentsProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
@@ -110,9 +128,22 @@ export function PaymentsProvider({ children }: { children: React.ReactNode }) {
       refresh: fetchAll,
       getById: (id) => all.find((p) => p.id === id),
       pay: async (id) => {
-        await payPeriod(id);
-        // On success (once the gateway is wired in), refetch rather than
-        // guessing the new paid/fine/status locally.
+        return initiatePayment(id);
+      },
+      confirmPayment: async (id) => {
+        for (let attempt = 0; attempt < CONFIRM_POLL_ATTEMPTS; attempt++) {
+          try {
+            const latest = await getPaymentStatus(id);
+            if (latest.status === 'paid') break;
+          } catch {
+            // transient — just retry on the next loop iteration
+          }
+          if (attempt < CONFIRM_POLL_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, CONFIRM_POLL_DELAY_MS));
+          }
+        }
+        // Refresh local lists either way — even a still-pending status is
+        // worth reflecting (e.g. resident cancelled partway through).
         await fetchAll();
       },
     };

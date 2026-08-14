@@ -7,6 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   dashboard: 'home-outline',
   payment: 'receipt-outline',
+  expenses: 'cash-outline',
   reports: 'bar-chart-outline',
   profile: 'person-outline',
 };
@@ -14,6 +15,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 const TAB_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   payment: 'Payments',
+  expenses: 'Expenses',
   reports: 'Reports',
   profile: 'Profile',
 };
@@ -84,6 +86,7 @@ export default function MainLayout() {
     <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <FloatingTabBar {...props} />}>
       <Tabs.Screen name="dashboard" />
       <Tabs.Screen name="payment" />
+      <Tabs.Screen name="expenses" />
       <Tabs.Screen name="reports" />
       <Tabs.Screen name="profile" />
     </Tabs>

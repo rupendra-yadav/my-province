@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { CheckoutOutcome, EasebuzzCheckout } from '../../components/payments/EasebuzzCheckout';
 import { FadeSlideIn, SegmentedTabs, formatINR } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { PaymentPeriod, usePayments } from '../../context/PaymentsContext';
@@ -74,7 +75,9 @@ function MonthCard({
         </View>
         <View>
           <Text style={[typography.tiny, { color: colors.textMuted }]}>Fine</Text>
-          <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.paid)}</Text>
+          {/* NOTE: was formatINR(item.paid) here before — looked like a copy/paste
+              slip against the field above it, fixed to reference item.fine. */}
+          <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.fine)}</Text>
         </View>
         <View>
           <Text style={[typography.tiny, { color: colors.textMuted }]}>Balance</Text>
@@ -136,6 +139,11 @@ export default function PaymentScreen() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  // Checkout modal state — set once pay() successfully starts a gateway
+  // transaction, cleared once the WebView reports an outcome.
+  const [checkout, setCheckout] = useState<{ id: string; payUrl: string } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
   const activePeriods = activeTab === 'maintenance' ? payments.maintenance : payments.membership;
   const unpaid = activePeriods.filter((p) => p.status !== 'paid');
   const payableId = unpaid.length
@@ -156,18 +164,32 @@ export default function PaymentScreen() {
 
   const houseNumber = u?.flat ?? '—';
   const ownerName = u?.name ?? '—';
-  const houseType = u?.block ??  '—';
+  const houseType = u?.block ?? '—';
   const monthlyDue = payablePeriod?.due ?? sorted[0]?.due ?? 0;
 
   const handlePay = async (id: string) => {
     setPayingId(id);
     setError('');
     try {
-      await payments.pay(id);
+      const { payUrl } = await payments.pay(id);
+      setCheckout({ id, payUrl });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Payment could not be completed. Please try again.');
+      setError(err instanceof ApiError ? err.message : 'Payment could not be started. Please try again.');
     } finally {
       setPayingId(null);
+    }
+  };
+
+  const handleCheckoutClose = async (outcome: CheckoutOutcome) => {
+    const id = checkout?.id;
+    setCheckout(null);
+    if (!id || outcome === 'cancelled') return;
+
+    setConfirming(true);
+    try {
+      await payments.confirmPayment(id);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -299,6 +321,15 @@ export default function PaymentScreen() {
           <Text style={[typography.caption, { color: colors.danger, marginBottom: spacing.md }]}>{error}</Text>
         )}
 
+        {confirming && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md }}>
+            <ActivityIndicator size="small" color={colors.accent} />
+            <Text style={[typography.tiny, { color: colors.textMuted, marginLeft: spacing.sm }]}>
+              Confirming payment...
+            </Text>
+          </View>
+        )}
+
         {sorted.length === 0 ? (
           <Text style={[typography.body, { color: colors.textMuted, paddingVertical: spacing.lg }]}>
             No {activeTab} charges yet.
@@ -315,6 +346,12 @@ export default function PaymentScreen() {
           ))
         )}
       </ScrollView>
+
+      <EasebuzzCheckout
+        visible={!!checkout}
+        payUrl={checkout?.payUrl ?? null}
+        onClose={handleCheckoutClose}
+      />
     </View>
   );
 }

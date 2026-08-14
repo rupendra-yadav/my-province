@@ -43,7 +43,7 @@ export default function ResidentPaymentListScreen() {
 
       <ResidentPaymentListContent
         initialFilter={filter ?? 'all'}
-        onSelectResident={(id) => router.push(`/(main)/reports/resident/${id}` as any)}
+        onSelectResident={(unitId) => router.push(`/(main)/reports/resident/${unitId}` as any)}
       />
     </View>
   );
