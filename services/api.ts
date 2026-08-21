@@ -1,18 +1,11 @@
-// services/api.ts
-// Single shared API client, using axios. Every screen should call
-// `apiFetch` (or the small helpers below) rather than using axios
-// directly, so the auth header, envelope-unwrapping, and error shape
-// stay consistent everywhere.
-
 import axios, { AxiosError } from 'axios';
+import { router } from 'expo-router';
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './authStorage';
 
-// TODO: set EXPO_PUBLIC_API_URL in a .env file at the project root, e.g.:
-//   EXPO_PUBLIC_API_URL=http://192.168.1.5/api/parisar/api/v1
-// Use your machine's LAN IP for physical devices, 10.0.2.2 for the
-// Android emulator, or localhost for the iOS simulator.
-const BASE_URL =  'https://meraparisar.com/app/api/v1';
-// const BASE_URL =  'http://192.168.122.171:4000/api/v1';
+if (!process.env.EXPO_PUBLIC_API_URL) {
+  throw new Error('EXPO_PUBLIC_API_URL is not set — check your .env file');
+}
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export class ApiError extends Error {
   code: number;
@@ -132,8 +125,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       envelope = await rawRequest<T>(path, options);
     } else {
       await clearTokens();
-      // Caller (a top-level auth guard) should catch this errorCode and
-      // redirect to the phone/login screen.
+      router.push('/(auth)/phone');
       throw new ApiError(401, 'Session expired. Please log in again.', 'SESSION_EXPIRED', null);
     }
   }
