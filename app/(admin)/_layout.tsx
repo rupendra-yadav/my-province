@@ -14,6 +14,8 @@ export default function AdminLayout() {
     >
       <Stack.Screen name="requests" />
       <Stack.Screen name="request/[id]" options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="payment/add-payment" options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="expense/add-expense" options={{ animation: 'slide_from_bottom' }} />
     </Stack>
   );
 }

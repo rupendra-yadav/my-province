@@ -2,13 +2,13 @@
 // This used to be the admin's landing screen ("dashboard"). Admins now land
 // on the shared /(main)/dashboard like everyone else, and reach this screen
 // via the "Admin Console" card. Content/behavior here is unchanged.
-import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TextInput, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { FadeSlideIn, SegmentedTabs, StatusChip } from '../../components/ui';
+import { ResidentRequest, useRequests } from '../../context/RequestsContext';
 import { useTheme } from '../../context/ThemeContext';
-import { useRequests, ResidentRequest } from '../../context/RequestsContext';
-import { FadeSlideIn, StatusChip, SegmentedTabs } from '../../components/ui';
 
 type Filter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -17,6 +17,51 @@ function timeAgo(iso: string) {
   if (days <= 0) return 'Today';
   if (days === 1) return 'Yesterday';
   return `${days} days ago`;
+}
+
+function QuickActionCard({
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  const { colors, radius, spacing, typography } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: radius.lg,
+        padding: spacing.lg,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: radius.md,
+            backgroundColor: colors.accentMuted,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={icon} size={18} color={colors.accent} />
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </View>
+      <Text style={[typography.bodyMedium, { color: colors.text, marginTop: spacing.md }]}>{title}</Text>
+      <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>{subtitle}</Text>
+    </Pressable>
+  );
 }
 
 function RequestCard({ item, onPress }: { item: ResidentRequest; onPress: () => void }) {
@@ -106,8 +151,25 @@ export default function AdminDashboard() {
           </Text>
         </FadeSlideIn>
 
+        <FadeSlideIn delay={40} style={{ marginTop: spacing.lg }}>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <QuickActionCard
+              icon="card-outline"
+              title="Add Payment"
+              subtitle="Record offline payment"
+              onPress={() => router.push('/(admin)/payment/add-payment' as any)}
+            />
+            <QuickActionCard
+              icon="receipt-outline"
+              title="Add Expense"
+              subtitle="Record society expense"
+              onPress={() => router.push('/(admin)/expense/add-expense' as any)}
+            />
+          </View>
+        </FadeSlideIn>
+
         <FadeSlideIn delay={80} style={{ marginTop: spacing.lg }}>
-          <View
+          {/* <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -130,7 +192,7 @@ export default function AdminDashboard() {
                 { flex: 1, color: colors.text, paddingVertical: spacing.md, paddingLeft: spacing.sm },
               ]}
             />
-          </View>
+          </View> */}
 
           <SegmentedTabs
             value={filter}

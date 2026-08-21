@@ -1,10 +1,11 @@
 // app/(main)/profile.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Card, FadeSlideIn, GhostButton, IconBadge } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 
 function InfoRow({
   icon,
@@ -38,9 +39,10 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function ProfileScreen() {
   const { colors, spacing, typography } = useTheme();
-  const { session, logout } = useAuth() as any;
+  const { session, logout, refresh } = useAuth() as any;
   const isAdmin = !!session?.isAdmin;
   const user = session?.user;
+  const { isRefreshing, onRefresh } = usePullToRefresh(refresh);
 
   // NOTE: verifyOtp's response type (lib/endpoints.ts VerifyOtpResult) only
   // returns { id, name, email, phone, societyId } on user. Society/block/
@@ -56,7 +58,10 @@ export default function ProfileScreen() {
         <Text style={[typography.h2, { color: colors.text }]}>Profile</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 80 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 80 }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.textMuted} />}
+      >
         <FadeSlideIn>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg }}>
             <IconBadge name="person-outline" size={52} />

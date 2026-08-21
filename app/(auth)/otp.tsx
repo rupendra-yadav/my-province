@@ -68,7 +68,7 @@ export default function OtpScreen() {
       } else if (!result.isRegistered) {
         // Covers both "never registered" and "previously rejected" —
         // both resubmit through the same registration screen.
-        router.push('/(auth)/register');
+        router.replace('/(auth)/register');
       } else if (result.requestStatus === 'pending') {
         router.replace('/(auth)/pending');
       } else {

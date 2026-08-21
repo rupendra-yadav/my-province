@@ -11,6 +11,10 @@ type AuthContextValue = {
   login: (result: VerifyOtpResult) => Promise<void>;
   hydrateSession: (bundle: SessionWithTokens) => Promise<StoredSession>;
   logout: () => Promise<void>;
+  /** Re-fetches GET /auth/me and merges it into the stored session. Used for
+   *  pull-to-refresh / tab-focus refresh on screens like profile.tsx. No-op
+   *  if there's no active session. */
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -90,8 +94,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   };
 
+  // Pull-to-refresh / tab-focus entry point — reuses the same merge logic
+  // as the post-login/hydrate path, just against whatever session is
+  // currently in state rather than a freshly hydrated one.
+  const refresh = async () => {
+    if (session) await refreshProfile(session);
+  };
+
   return (
-    <AuthContext.Provider value={{ session, isLoading, login, hydrateSession, logout }}>
+    <AuthContext.Provider value={{ session, isLoading, login, hydrateSession, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

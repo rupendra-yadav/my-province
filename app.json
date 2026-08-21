@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mera-parisar",
+    "name": "Mera Parisar",
     "slug": "mera-parisar",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,13 +14,11 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icons/playstore-icon.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/android-icons/playstore-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.meraparisar"
+      "package": "com.meraparisar.app"
     },
     "plugins": [
       "expo-router",

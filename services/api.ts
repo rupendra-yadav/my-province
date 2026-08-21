@@ -12,7 +12,7 @@ import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './auth
 // Use your machine's LAN IP for physical devices, 10.0.2.2 for the
 // Android emulator, or localhost for the iOS simulator.
 const BASE_URL =  'https://meraparisar.com/app/api/v1';
-// const BASE_URL =  'http://192.168.122.47:4000/api/v1';
+// const BASE_URL =  'http://192.168.122.171:4000/api/v1';
 
 export class ApiError extends Error {
   code: number;

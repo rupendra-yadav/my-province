@@ -59,7 +59,6 @@ export const listProperties = (societyId: number, blockId: number) =>
 // ---- Requests (admin) ------------------------------------------------
 
 export interface RequestListParams {
-  societyId: number;
   status?: 'pending' | 'approved' | 'rejected';
   search?: string;
   page?: number;
@@ -80,11 +79,12 @@ export interface RequestItem {
   rejectionReason?: string;
 }
 
+// societyId is resolved server-side from the admin's auth token
+// (societies.society_admin -> users.id), so no societyId param is sent here.
 export const listRequests = (params: RequestListParams) =>
   api.get<{ requests: RequestItem[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
     '/requests',
     {
-      societyId: params.societyId,
       status: params.status,
       search: params.search,
       page: params.page,
@@ -131,6 +131,87 @@ export const initiatePayment = (id: string) =>
 export const getPaymentStatus = (id: string) =>
   api.get<PaymentPeriodDto>(`/payments/${id}/status`);
  
+
+// ---- Admin: record offline payment ("Add Payment") -----------------------
+
+export interface ResidentSearchResult {
+  userId: string;
+  unitId: number;
+  name: string;
+  phone: string;
+  flat: string;
+  block: string;
+}
+
+// societyId is resolved server-side from the admin's auth token
+// (societies.society_admin -> users.id), so no societyId param is sent here.
+export const searchResidents = (query: string) =>
+  api.get<{ residents: ResidentSearchResult[] }>('/admin/payments/residents/search', { query });
+
+export type PaymentMode = 'cash' | 'upi' | 'card' | 'bank_transfer' | 'cheque' | 'other';
+
+export interface RecordPaymentInput {
+  unitId: number;
+  userId: string;
+  amount: number;
+  paymentDate: string; // ISO date, e.g. '2026-08-17'
+  paymentMode: PaymentMode;
+  referenceNo?: string;
+  remarks?: string;
+}
+
+export interface RecordedPaymentDto {
+  id: string;
+  unitId: number;
+  residentName: string;
+  amount: number;
+  paymentDate: string;
+  paymentMode: string;
+  referenceNo: string | null;
+}
+
+export const recordOfflinePayment = (input: RecordPaymentInput) =>
+  api.post<RecordedPaymentDto>('/admin/payments', input);
+
+// ---- Admin: expenses ("Add Expense") --------------------------------------
+
+export interface CreateExpenseInput {
+  category: string;
+  description: string;
+  amount: number;
+  expenseDate: string; // ISO date
+  paymentMode: string;
+  vendorName?: string;
+  referenceNo?: string;
+  remarks?: string;
+}
+
+export interface ExpenseRecordDto {
+  id: string;
+  category: string;
+  description: string;
+  amount: number;
+  expenseDate: string;
+  paymentMode: string;
+  referenceNo: string | null;
+  remarks: string | null;
+  createdAt: string | null;
+}
+
+export const createExpense = (input: CreateExpenseInput) =>
+  api.post<ExpenseRecordDto>('/expenses', input);
+
+// societyId is resolved server-side from the admin's auth token.
+export const listExpenses = (params: {
+  category?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+} = {}) =>
+  api.get<{
+    expenses: ExpenseRecordDto[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }>('/expenses', params);
 
 // ---- Session validation -----------------------------------------------
 

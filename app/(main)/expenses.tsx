@@ -1,17 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EXPENSE_CATEGORIES, ExpenseRecord, MOCK_EXPENSES } from '../../components/expenses/mockExpenses';
+import { EXPENSE_CATEGORIES } from '../../components/expenses/mockExpenses';
 import {
-    Card,
-    FadeSlideIn,
-    formatINR,
-    IconBadge,
-    MonthRangeSelector,
+  Card,
+  FadeSlideIn,
+  formatINR,
+  IconBadge,
+  MonthRangeSelector,
 } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
+import { ExpenseRecord, useExpenses } from '../../context/ExpensesContext';
 import { useTheme } from '../../context/ThemeContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useReportsCycleRange } from '../../hooks/useReportsCycleRange';
 
 const CATEGORY_PREVIEW_COUNT = 4;
@@ -20,7 +23,7 @@ const RECENT_PREVIEW_COUNT = 10;
 // ---------- period / bucketing helpers ----------
 
 function isInRange(dateISO: string, range: { fromMonth: number; fromYear: number; toMonth: number; toYear: number }) {
-  const d = new Date(dateISO + 'T00:00:00');
+  const d = new Date(dateISO);;
   const idx = d.getFullYear() * 12 + d.getMonth(); // 0-indexed month
   const fromIdx = range.fromYear * 12 + (range.fromMonth - 1);
   const toIdx = range.toYear * 12 + (range.toMonth - 1);
@@ -41,11 +44,24 @@ function toLakh(amount: number) {
 }
 
 function formatDate(dateISO: string) {
-  return new Date(dateISO + 'T00:00:00').toLocaleDateString('en-IN', {
+  return new Date(dateISO).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
+}
+
+// TODO(category-icons): real expense categories are freeform text typed by
+// the admin (see CreateExpenseInput.category), not a fixed enum — unlike
+// this EXPENSE_CATEGORIES list, which was built for mock data. We match by
+// label (case-insensitive) where possible and fall back to a generic icon
+// for anything that doesn't match. Revisit if/when categories get a proper
+// admin-managed list with real icon mapping.
+function iconForCategory(categoryLabel: string): keyof typeof Ionicons.glyphMap {
+  const match = EXPENSE_CATEGORIES.find(
+    (c) => c.label.toLowerCase() === categoryLabel.toLowerCase()
+  );
+  return match?.icon ?? 'ellipsis-horizontal-circle-outline';
 }
 
 // ---------- Hero summary card ----------
@@ -262,7 +278,6 @@ function ExpenseTrendChart({ data }: { data: { key: string; label: string; value
 
 function ExpenseRow({ item, isLast }: { item: ExpenseRecord; isLast: boolean }) {
   const { colors, spacing, typography } = useTheme();
-  const category = EXPENSE_CATEGORIES.find((c) => c.key === item.categoryKey);
   return (
     <View
       style={{
@@ -273,13 +288,16 @@ function ExpenseRow({ item, isLast }: { item: ExpenseRecord; isLast: boolean }) 
         borderBottomColor: colors.border,
       }}
     >
-      <IconBadge name={category?.icon ?? 'ellipsis-horizontal-circle-outline'} size={38} />
+      <IconBadge name={iconForCategory(item.category)} size={38} />
       <View style={{ flex: 1, marginLeft: spacing.md, marginRight: spacing.sm }}>
         <Text style={[typography.bodyMedium, { color: colors.text }]} numberOfLines={1}>
-          {item.title}
+          {item.description}
         </Text>
+        {/* TODO(vendor-field): ExpenseRecordDto doesn't return vendorName
+            yet, so vendor can't be shown here — add it to the backend
+            response if this list should include it. */}
         <Text style={[typography.tiny, { color: colors.textMuted, marginTop: 2 }]} numberOfLines={1}>
-          {category?.label ?? 'Miscellaneous'} · {item.vendor} · {formatDate(item.date)}
+          {item.category} · {formatDate(item.expenseDate)}
         </Text>
       </View>
       <Text style={[typography.bodyMedium, { color: colors.text }]}>{formatINR(item.amount)}</Text>
@@ -296,6 +314,8 @@ export default function ExpensesScreen() {
   const isAdmin = !!session?.isAdmin;
 
   const { range, setRange } = useReportsCycleRange();
+  const { expenses, isLoading, error, refresh } = useExpenses();
+  const { isRefreshing, onRefresh } = usePullToRefresh(refresh);
 
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllRecent, setShowAllRecent] = useState(false);
@@ -303,28 +323,29 @@ export default function ExpensesScreen() {
   // Every expense record within the selected Reporting Period — the
   // single source of truth the rest of this screen derives from.
   const periodRecords = useMemo(
-    () => MOCK_EXPENSES.filter((r) => isInRange(r.date, range)).sort((a, b) => b.date.localeCompare(a.date)),
-    [range]
+    () =>
+      expenses
+        .filter((r) => isInRange(r.expenseDate, range))
+        .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
+    [expenses, range]
   );
 
   const totalAmount = useMemo(() => periodRecords.reduce((sum, r) => sum + r.amount, 0), [periodRecords]);
 
   const categoryStats: CategoryStat[] = useMemo(() => {
-    const byKey = new Map<string, { amount: number; count: number }>();
+    const byLabel = new Map<string, { amount: number; count: number }>();
     for (const r of periodRecords) {
-      const cur = byKey.get(r.categoryKey) ?? { amount: 0, count: 0 };
+      const cur = byLabel.get(r.category) ?? { amount: 0, count: 0 };
       cur.amount += r.amount;
       cur.count += 1;
-      byKey.set(r.categoryKey, cur);
+      byLabel.set(r.category, cur);
     }
     const stats: CategoryStat[] = [];
-    for (const def of EXPENSE_CATEGORIES) {
-      const agg = byKey.get(def.key);
-      if (!agg) continue;
+    for (const [label, agg] of byLabel.entries()) {
       stats.push({
-        key: def.key,
-        label: def.label,
-        icon: def.icon,
+        key: label,
+        label,
+        icon: iconForCategory(label),
         amount: agg.amount,
         count: agg.count,
         pct: totalAmount > 0 ? Math.round((agg.amount / totalAmount) * 100) : 0,
@@ -336,7 +357,7 @@ export default function ExpensesScreen() {
   const trend = useMemo(() => {
     const byMonth = new Map<string, number>();
     for (const r of periodRecords) {
-      const key = monthKey(r.date);
+      const key = monthKey(r.expenseDate);
       byMonth.set(key, (byMonth.get(key) ?? 0) + r.amount);
     }
     return Array.from(byMonth.entries())
@@ -364,7 +385,10 @@ export default function ExpensesScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 90 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 90 }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.textMuted} />}
+      >
         {/* Reporting period */}
         <FadeSlideIn style={{ marginBottom: spacing.lg }}>
           <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.sm }]}>
@@ -372,6 +396,17 @@ export default function ExpensesScreen() {
           </Text>
           <MonthRangeSelector value={range!} onChange={setRange} />
         </FadeSlideIn>
+
+        {error && (
+          <FadeSlideIn style={{ marginBottom: spacing.md }}>
+            <Card style={{ padding: spacing.md, backgroundColor: colors.dangerBg }}>
+              <Text style={[typography.caption, { color: colors.danger }]}>{error}</Text>
+              <Pressable onPress={refresh} style={{ marginTop: spacing.xs }}>
+                <Text style={[typography.caption, { color: colors.accent }]}>Tap to retry</Text>
+              </Pressable>
+            </Card>
+          </FadeSlideIn>
+        )}
 
         {/* Hero */}
         <FadeSlideIn delay={40} style={{ marginBottom: spacing.md }}>
@@ -399,7 +434,9 @@ export default function ExpensesScreen() {
             )}
           </View>
 
-          {categoryStats.length === 0 ? (
+          {isLoading && categoryStats.length === 0 ? (
+            <Text style={[typography.body, { color: colors.textMuted }]}>Loading…</Text>
+          ) : categoryStats.length === 0 ? (
             <Text style={[typography.body, { color: colors.textMuted }]}>No expenses recorded for this period.</Text>
           ) : (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
@@ -432,7 +469,9 @@ export default function ExpensesScreen() {
             )}
           </View>
 
-          {periodRecords.length === 0 ? (
+          {isLoading && periodRecords.length === 0 ? (
+            <Text style={[typography.body, { color: colors.textMuted }]}>Loading…</Text>
+          ) : periodRecords.length === 0 ? (
             <Text style={[typography.body, { color: colors.textMuted }]}>No expenses recorded for this period.</Text>
           ) : (
             <Card style={{ padding: spacing.lg }}>
@@ -444,13 +483,10 @@ export default function ExpensesScreen() {
         </FadeSlideIn>
       </ScrollView>
 
-      {/* Admin-only add expense FAB — view-only for residents per spec.
-          onPress is a placeholder: Add Expense flow is a later task. */}
+      {/* Admin-only add expense FAB */}
       {isAdmin && (
         <Pressable
-          onPress={() => {
-            // TODO: navigate to Add Expense flow once it exists.
-          }}
+          onPress={() => router.push('/expense/add-expense' as any)}
           style={{
             position: 'absolute',
             right: spacing.xl,

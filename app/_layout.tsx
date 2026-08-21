@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '../context/AuthContext';
+import { ExpensesProvider } from '../context/ExpensesContext';
 import { PaymentsProvider } from '../context/PaymentsContext';
 import { RequestsProvider } from '../context/RequestsContext';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
@@ -36,7 +37,9 @@ export default function RootLayout() {
       <AuthProvider>
         <RequestsProvider>
           <PaymentsProvider>
-            <RootStack />
+            <ExpensesProvider>
+              <RootStack />
+            </ExpensesProvider>
           </PaymentsProvider>
         </RequestsProvider>
       </AuthProvider>

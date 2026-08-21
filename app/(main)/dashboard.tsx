@@ -5,69 +5,84 @@ import { FadeSlideIn, formatINR } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { usePayments } from '../../context/PaymentsContext';
 import { useTheme } from '../../context/ThemeContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 
-type Period = { status: string; due: number; paid: number; fine: number };
+type Period = { status: string; due: number };
+
+function sumDueByStatus(periods: Period[], paid: boolean) {
+  return periods
+    .filter((p) => (paid ? p.status === 'paid' : p.status !== 'paid'))
+    .reduce((sum, p) => sum + p.due, 0);
+}
+
 type IconName = keyof typeof Ionicons.glyphMap;
 
-function sumDue(periods: Period[]) {
-  return periods.reduce((sum, p) => sum + p.due + p.fine, 0);
-}
-function sumPaid(periods: Period[]) {
-  return periods.reduce((sum, p) => sum + p.paid, 0);
-}
+
+const ACCENTS = {
+  orange: { line: '#E08A4B', bg: '#FBEEE3', fg: '#C1682A' },
+  green: { line: '#4CAF7D', bg: '#E7F5EE', fg: '#2E8A5B' },
+  blue: { line: '#4B84D8', bg: '#E8F0FC', fg: '#2E63B0' },
+  purple: { line: '#8A6FD8', bg: '#EFEAFB', fg: '#6B4FBE' },
+  pink: { line: '#D8628A', bg: '#FBEAF0', fg: '#B84368' },
+  teal: { line: '#3FAFA0', bg: '#E5F5F2', fg: '#268577' },
+  red: { line: '#D8574B', bg: '#FBEBE9', fg: '#B93A2D' },
+};
+type AccentKey = keyof typeof ACCENTS;
 
 function StatCard({
   label,
   value,
   icon,
-  emphasis = 'default',
+  accent,
+  highlight = false,
 }: {
   label: string;
   value: number;
   icon: IconName;
-  emphasis?: 'default' | 'strong' | 'accent';
+  accent: AccentKey;
+  highlight?: boolean;
 }) {
-  const { colors, radius, spacing, typography } = useTheme();
-
-  const bg = emphasis === 'strong' ? colors.text : colors.surface;
-  const border = emphasis === 'accent' ? colors.danger : colors.border;
-  const labelColor = emphasis === 'strong' ? colors.background : colors.textMuted;
-  const valueColor =
-    emphasis === 'strong' ? colors.background : emphasis === 'accent' ? colors.danger : colors.text;
-  const iconBg =
-    emphasis === 'strong'
-      ? 'rgba(255,255,255,0.12)'
-      : emphasis === 'accent'
-      ? colors.danger
-      : colors.primaryMuted;
-  const iconColor = emphasis === 'strong' ? colors.background : emphasis === 'accent' ? colors.background : colors.danger;
+  const { colors, spacing, typography } = useTheme();
+  const a = ACCENTS[accent];
 
   return (
     <View
       style={{
         flexBasis: '48%',
-        backgroundColor: bg,
-        borderWidth: emphasis === 'strong' ? 0 : 1,
-        borderColor: border,
-        borderRadius: radius.lg,
+        backgroundColor: colors.surface,
+        borderRadius: 16,
         padding: spacing.lg,
+        overflow: 'hidden',
+        borderWidth: highlight ? 1.5 : 1,
+        borderColor: highlight ? a.line : colors.border,
+        borderLeftWidth: 4,
+        borderLeftColor: a.line,
       }}
     >
+      <Ionicons
+        name={icon}
+        size={72}
+        color={a.line}
+        style={{ position: 'absolute', right: -14, bottom: -14, opacity: 0.08 }}
+      />
+
       <View
         style={{
           width: 32,
           height: 32,
-          borderRadius: radius.md,
-          backgroundColor: iconBg,
+          borderRadius: 10,
+          backgroundColor: a.bg,
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: spacing.sm,
         }}
       >
-        <Ionicons name={icon} size={16} color={iconColor} />
+        <Ionicons name={icon} size={16} color={a.fg} />
       </View>
-      <Text style={[typography.caption, { color: labelColor }]}>{label}</Text>
-      <Text style={[typography.h2, { color: valueColor, marginTop: spacing.sm }]}>{formatINR(value)}</Text>
+      <Text style={[typography.caption, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[typography.h2, { color: highlight ? a.fg : colors.text, marginTop: spacing.sm }]}>
+        {formatINR(value)}
+      </Text>
     </View>
   );
 }
@@ -77,47 +92,74 @@ export default function DashboardScreen() {
   const { session } = useAuth();
   const payments = usePayments();
   const router = useRouter();
+  const { isRefreshing, onRefresh } = usePullToRefresh(payments.refresh);
 
-  const maintenanceDue = sumDue(payments.maintenance);
-  const maintenancePaid = sumPaid(payments.maintenance);
-  const donationsDue = sumDue(payments.membership);
-  const donationsPaid = sumPaid(payments.membership);
+
+  const maintenanceDue = sumDueByStatus(payments.maintenance, false);   // payable
+  const maintenancePaid = sumDueByStatus(payments.maintenance, true);   // paid
+
+  const donationsDue = sumDueByStatus(payments.membership, false);
+  const donationsPaid = sumDueByStatus(payments.membership, true);
 
   const totalDue = maintenanceDue + donationsDue;
   const totalPaid = maintenancePaid + donationsPaid;
-  const balance = Math.max(0, totalDue - totalPaid);
+  const balance = totalDue; // unpaid periods' due — already excludes paid ones
 
   const isAdmin = session?.isAdmin;
+  const initial = (session?.user?.name?.trim()?.[0] ?? '?').toUpperCase();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl, paddingBottom: spacing.xxxl + 90 }}
         refreshControl={
-          <RefreshControl refreshing={payments.isLoading} onRefresh={payments.refresh} tintColor={colors.textMuted} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.textMuted} />
         }
       >
         <FadeSlideIn
-          style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg }}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: spacing.lg,
+          }}
         >
-          
           <View>
-            <Text style={[typography.h1, { color: colors.text, marginTop: 2 }]}>Dashboard</Text>
-            <Text style={[typography.caption, { color: colors.textMuted }]}>{session?.user?.name ?? ''}</Text>
+            <Text style={[typography.h1, { color: colors.text }]}>Dashboard</Text>
+            <Text style={[typography.caption, { color: colors.textMuted }]}>
+              {session?.user?.name ?? ''}
+              {isAdmin ? ' (admin)' : ''}
+            </Text>
+          </View>
+
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: ACCENTS.orange.bg,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: ACCENTS.orange.fg, fontSize: 18, fontWeight: '600' }}>{initial}</Text>
           </View>
         </FadeSlideIn>
-
 
         {isAdmin && (
           <FadeSlideIn delay={160}>
             <TouchableOpacity
-              onPress={() => router.push('/(admin)/dashboard')}
+              onPress={() => router.push('/(admin)/requests')}
               activeOpacity={0.8}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: colors.text,
+                backgroundColor: colors.surface,
                 borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderLeftWidth: 4,
+                borderLeftColor: colors.accent,
                 paddingVertical: spacing.md,
                 paddingHorizontal: spacing.lg,
                 marginBottom: spacing.lg,
@@ -128,24 +170,25 @@ export default function DashboardScreen() {
                   width: 40,
                   height: 40,
                   borderRadius: radius.md,
-                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  backgroundColor: colors.accentMuted,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
               >
-                <Ionicons name="shield-checkmark-outline" size={20} color={colors.background} />
+                <Ionicons name="shield-checkmark-outline" size={20} color={colors.accent} />
               </View>
 
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={[typography.bodyMedium, { color: colors.background }]}>Admin console</Text>
-              <Text style={[typography.caption, { color: 'rgba(255,255,255,0.65)', marginTop: 2 }]}>
-                Manage requests and residents
-              </Text>
-            </View>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={[typography.bodyMedium, { color: colors.text }]}>Admin console</Text>
+                <Text style={[typography.caption, { color: colors.textMuted, marginTop: 2 }]}>
+                  Manage requests and residents
+                </Text>
+              </View>
 
-            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.65)" />
-          </TouchableOpacity>
-        </FadeSlideIn>)}
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          </FadeSlideIn>
+        )}
 
         {payments.isLoading && payments.maintenance.length === 0 ? (
           <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
@@ -156,15 +199,14 @@ export default function DashboardScreen() {
             delay={100}
             style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md }}
           >
-            <StatCard label="Total payable" value={totalDue} icon="wallet-outline" />
-            <StatCard label="Total paid" value={totalPaid} icon="checkmark-circle-outline" />
-            <StatCard label="Maintenance payable" value={maintenanceDue} icon="home-outline" />
-            <StatCard label="Maintenance paid" value={maintenancePaid} icon="construct-outline" />
-            <StatCard label="Membership payable" value={donationsDue} icon="heart-outline" />
-            <StatCard label="Membership paid" value={donationsPaid} icon="heart-outline" />
-            <StatCard label="Balance" value={balance} icon="alert-circle-outline" emphasis="accent" />
-            <StatCard label="Donations paid" value={donationsPaid} icon="heart-outline" />
-          </FadeSlideIn>
+            <StatCard label="Total payable" value={totalDue} icon="wallet-outline" accent="orange" />
+            <StatCard label="Total paid" value={totalPaid} icon="checkmark-circle-outline" accent="green" />
+            <StatCard label="Maintenance payable" value={maintenanceDue} icon="home-outline" accent="blue" />
+            <StatCard label="Maintenance paid" value={maintenancePaid} icon="construct-outline" accent="purple" />
+            <StatCard label="Membership payable" value={donationsDue} icon="card-outline" accent="pink" />
+            <StatCard label="Membership paid" value={donationsPaid} icon="people-outline" accent="teal" />
+            <StatCard label="Balance" value={balance} icon="alert-circle-outline" accent="red" highlight />
+            <StatCard label="Donations paid" value={0} icon="gift-outline" accent="purple" /> </FadeSlideIn>
         )}
       </ScrollView>
     </View>

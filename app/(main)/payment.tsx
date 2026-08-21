@@ -1,17 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { CheckoutOutcome, EasebuzzCheckout } from '../../components/payments/EasebuzzCheckout';
 import { FadeSlideIn, SegmentedTabs, formatINR } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { PaymentPeriod, usePayments } from '../../context/PaymentsContext';
 import { useTheme } from '../../context/ThemeContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { ApiError } from '../../services/api';
 
 function currentPeriodKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+const ACCENTS = {
+  orange: { line: '#E08A4B', bg: '#FBEEE3', fg: '#C1682A' },
+  green: { line: '#4CAF7D', bg: '#E7F5EE', fg: '#2E8A5B' },
+  blue: { line: '#4B84D8', bg: '#E8F0FC', fg: '#2E63B0' },
+  purple: { line: '#8A6FD8', bg: '#EFEAFB', fg: '#6B4FBE' },
+  pink: { line: '#D8628A', bg: '#FBEAF0', fg: '#B84368' },
+  teal: { line: '#3FAFA0', bg: '#E5F5F2', fg: '#268577' },
+  red: { line: '#D8574B', bg: '#FBEBE9', fg: '#B93A2D' },
+};
+const SUCCESS = ACCENTS.green;
 
 function MonthCard({
   item,
@@ -25,23 +37,32 @@ function MonthCard({
   onPay: () => void;
 }) {
   const { colors, radius, spacing, typography } = useTheme();
+  const [showComingSoon, setShowComingSoon] = useState(false);
   const isPaid = item.status === 'paid';
   const locked = !isPaid && !isPayable;
   const balance = item.due + item.fine - item.paid;
   const overdue = item.period < currentPeriodKey();
 
   const badge = isPaid
-    ? { label: 'Paid', bg: colors.success + '22', text: colors.success }
+    ? { label: 'Paid', bg: SUCCESS.bg, text: SUCCESS.fg }
     : isPayable
-      ? { label: overdue ? 'Overdue' : 'Due', bg: colors.danger + '22', text: colors.danger }
-      : { label: 'Pending', bg: colors.primaryMuted, text: colors.textMuted };
+      ? overdue
+        ? { label: 'Overdue', bg: ACCENTS.red.bg, text: ACCENTS.red.fg }
+        : { label: 'Due', bg: ACCENTS.orange.bg, text: ACCENTS.orange.fg }
+      : { label: 'Pending', bg: ACCENTS.purple.bg, text: ACCENTS.purple.fg };
 
   return (
     <View
       style={{
         backgroundColor: colors.surface,
         borderWidth: isPayable ? 1.5 : 1,
-        borderColor: isPayable ? colors.accent : colors.border,
+        borderColor: isPaid
+          ? SUCCESS.line
+          : isPayable
+            ? overdue
+              ? ACCENTS.red.line
+              : ACCENTS.orange.line
+            : colors.border,
         borderRadius: radius.lg,
         padding: spacing.lg,
         marginBottom: spacing.md,
@@ -75,8 +96,6 @@ function MonthCard({
         </View>
         <View>
           <Text style={[typography.tiny, { color: colors.textMuted }]}>Fine</Text>
-          {/* NOTE: was formatINR(item.paid) here before — looked like a copy/paste
-              slip against the field above it, fixed to reference item.fine. */}
           <Text style={[typography.caption, { color: colors.text }]}>{formatINR(item.fine)}</Text>
         </View>
         <View>
@@ -86,14 +105,14 @@ function MonthCard({
       </View>
 
       {isPaid ? (
-        <View style={{ backgroundColor: colors.success + '1a', borderRadius: radius.md, padding: spacing.sm }}>
+        <View style={{ backgroundColor: SUCCESS.bg, borderRadius: radius.md, padding: spacing.sm, borderWidth: 1, borderColor: SUCCESS.line }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="checkmark-circle-outline" size={14} color={colors.success} />
-            <Text style={[typography.caption, { color: colors.success, marginLeft: 6, fontWeight: '500' as const }]}>
+            <Ionicons name="checkmark-circle-outline" size={14} color={SUCCESS.fg} />
+            <Text style={[typography.caption, { color: SUCCESS.fg, marginLeft: 6, fontWeight: '500' as const }]}>
               Payment completed
             </Text>
           </View>
-          <Text style={[typography.tiny, { color: colors.success, marginTop: 2 }]}>
+          <Text style={[typography.tiny, { color: SUCCESS.fg, marginTop: 2 }]}>
             Paid {formatINR(item.paid)}
             {item.paidDate ? ` on ${new Date(item.paidDate).toLocaleDateString()}` : ''}
           </Text>
@@ -104,29 +123,75 @@ function MonthCard({
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.accent,
+            backgroundColor: overdue ? ACCENTS.red.fg : ACCENTS.orange.fg,
             borderRadius: radius.md,
             paddingVertical: spacing.sm,
             opacity: submitting ? 0.6 : 1,
           }}
-          onTouchEnd={submitting ? undefined : onPay}
+          //TODO: fix this
+          // onTouchEnd={submitting ? undefined : onPay}
+          onTouchEnd={submitting ? undefined : () => setShowComingSoon(true)}
         >
           {submitting ? (
-            <ActivityIndicator color={colors.onPrimary} size="small" />
+            <ActivityIndicator color="#fff" size="small" />
           ) : (
             <>
-              <Ionicons name="card-outline" size={16} color={colors.onPrimary} />
-              <Text style={[typography.caption, { color: colors.onPrimary, marginLeft: 8, fontWeight: '500' as const }]}>
+              <Ionicons name="card-outline" size={16} color="#fff" />
+              <Text style={[typography.caption, { color: '#fff', marginLeft: 8, fontWeight: '500' as const }]}>
                 Pay {formatINR(balance)} for {item.label}
               </Text>
             </>
           )}
         </View>
       ) : (
-        <View style={{ backgroundColor: colors.primaryMuted, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center' }}>
-          <Text style={[typography.tiny, { color: colors.textMuted }]}>Pay earlier dues first</Text>
+        <View style={{ backgroundColor: ACCENTS.purple.bg, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center' }}>
+          <Text style={[typography.tiny, { color: ACCENTS.purple.fg }]}>Pay earlier dues first</Text>
         </View>
       )}
+
+      <Modal visible={showComingSoon} transparent animationType="fade" onRequestClose={() => setShowComingSoon(false)}>
+        <Pressable
+          onPress={() => setShowComingSoon(false)}
+          style={{ flex: 1, backgroundColor: '#0006', alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}
+        >
+          <Pressable
+            onPress={() => { }}
+            style={{ backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.xl, width: '100%', alignItems: 'center' }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: radius.pill,
+                backgroundColor: ACCENTS.blue.bg,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: spacing.md,
+              }}
+            >
+              <Ionicons name="time-outline" size={28} color={ACCENTS.blue.fg} />
+            </View>
+            <Text style={[typography.bodyMedium, { color: colors.text, textAlign: 'center' }]}>
+              Online payments coming soon
+            </Text>
+            <Text style={[typography.caption, { color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm }]}>
+              Please contact your society admin to make this payment for now.
+            </Text>
+            <View
+              style={{
+                backgroundColor: ACCENTS.blue.fg,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.xl,
+                marginTop: spacing.lg,
+              }}
+              onTouchEnd={() => setShowComingSoon(false)}
+            >
+              <Text style={[typography.caption, { color: '#fff', fontWeight: '500' as const }]}>Got it</Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -135,6 +200,7 @@ export default function PaymentScreen() {
   const { colors, spacing, radius, typography } = useTheme();
   const { session } = useAuth();
   const payments = usePayments();
+  const { isRefreshing, onRefresh } = usePullToRefresh(payments.refresh);
   const [activeTab, setActiveTab] = useState<'maintenance' | 'membership'>('maintenance');
   const [payingId, setPayingId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -143,6 +209,8 @@ export default function PaymentScreen() {
   // transaction, cleared once the WebView reports an outcome.
   const [checkout, setCheckout] = useState<{ id: string; payUrl: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+
 
   const activePeriods = activeTab === 'maintenance' ? payments.maintenance : payments.membership;
   const unpaid = activePeriods.filter((p) => p.status !== 'paid');
@@ -199,17 +267,20 @@ export default function PaymentScreen() {
         <Text style={[typography.h1, { color: colors.text }]}>Payments</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 90 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.xxxl + 90 }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={colors.textMuted} />}
+      >
         <FadeSlideIn style={{ marginBottom: spacing.lg }}>
-        <SegmentedTabs
-          options={[
-            { key: 'maintenance', label: 'Maintenance', count: payments.maintenance.length },
-            { key: 'membership', label: 'Membership', count: payments.membership.length },
-          ]}
-          value={activeTab}
-          onChange={(k) => setActiveTab(k as 'maintenance' | 'membership')}
-        />
-      </FadeSlideIn>
+          <SegmentedTabs
+            options={[
+              { key: 'maintenance', label: 'Maintenance', count: payments.maintenance.length },
+              { key: 'membership', label: 'Membership', count: payments.membership.length },
+            ]}
+            value={activeTab}
+            onChange={(k) => setActiveTab(k as 'maintenance' | 'membership')}
+          />
+        </FadeSlideIn>
 
         <FadeSlideIn delay={40}>
           <View

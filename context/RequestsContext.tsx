@@ -28,27 +28,25 @@ export function RequestsProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const societyId = session?.user?.societyId;
-
   const fetchAll = useCallback(async () => {
-    if (!societyId) return;
     setIsLoading(true);
     setError(null);
     try {
       // "keep it simple" approach: one large page, filter/search stays
-      // client-side in the dashboard exactly as it already did.
-      const result = await listRequests({ societyId, page: 1, limit: 20 });
+      // client-side in the dashboard exactly as it already did. societyId
+      // isn't sent — the server resolves it from the admin's own token.
+      const result = await listRequests({ page: 1, limit: 20 });
       setRequests(result.requests);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load requests.');
     } finally {
       setIsLoading(false);
     }
-  }, [societyId]);
+  }, []);
 
   useEffect(() => {
-    if (session?.isAdmin && societyId) fetchAll();
-  }, [session?.isAdmin, societyId, fetchAll]);
+    if (session?.isAdmin) fetchAll();
+  }, [session?.isAdmin, fetchAll]);
 
   const value = useMemo<RequestsContextValue>(
     () => ({
