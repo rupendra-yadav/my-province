@@ -1,7 +1,7 @@
 // app/(auth)/pending.tsx
 import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { Card, FadeSlideIn } from '../../components/ui';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -58,8 +58,8 @@ export default function PendingScreen() {
                     backgroundColor: step.done
                       ? colors.success
                       : step.active
-                      ? colors.warning
-                      : colors.border,
+                        ? colors.warning
+                        : colors.border,
                   }}
                 >
                   <Ionicons
@@ -130,6 +130,7 @@ export default function PendingScreen() {
       </FadeSlideIn>
 
       <Pressable
+        onPress={() => Linking.openURL('https://meraparisar.com/contact')}
         style={{
           flexDirection: 'row',
           alignItems: 'center',

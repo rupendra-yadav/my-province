@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { FadeSlideIn, IconBadge, PrimaryButton, ScreenHeading } from '../../components/ui';
 import { useTheme } from '../../context/ThemeContext';
 import { ApiError } from '../../services/api';
@@ -13,10 +13,15 @@ export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   const handleContinue = async () => {
     if (phone.length !== 10) {
       setError('Enter a valid 10-digit mobile number');
+      return;
+    }
+    if (!agreed) {
+      setError('Please accept the Terms & Conditions and Privacy Policy to continue');
       return;
     }
     setError('');
@@ -123,6 +128,39 @@ export default function PhoneScreen() {
         </FadeSlideIn>
 
         <View style={{ flex: 1, minHeight: spacing.xxl }} />
+
+        <FadeSlideIn delay={140}>
+          <Pressable
+            onPress={() => setAgreed((prev) => !prev)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              marginBottom: spacing.lg,
+            }}
+          >
+            <Ionicons
+              name={agreed ? 'checkbox' : 'square-outline'}
+              size={20}
+              color={agreed ? colors.primary : colors.textMuted}
+            />
+            <Text style={[typography.caption, { color: colors.textMuted, marginLeft: spacing.sm, flex: 1, lineHeight: 18 }]}>
+              I agree to the{' '}
+              <Text
+                style={{ color: colors.primary }}
+                onPress={() => Linking.openURL('https://meraparisar.com/terms')}
+              >
+                Terms & Conditions
+              </Text>
+              {' '}and{' '}
+              <Text
+                style={{ color: colors.primary }}
+                onPress={() => Linking.openURL('https://meraparisar.com/privacy-policy')}
+              >
+                Privacy Policy
+              </Text>
+            </Text>
+          </Pressable>
+        </FadeSlideIn>
 
         <FadeSlideIn delay={160}>
           <PrimaryButton label="Send OTP" icon="arrow-forward" loading={submitting} onPress={handleContinue} />
